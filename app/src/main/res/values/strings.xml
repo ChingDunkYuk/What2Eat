@@ -1,0 +1,40 @@
+<resources>
+    <string name="app_name">今晚吃什么</string>
+
+    <!-- Bottom Navigation -->
+    <string name="nav_home">首页</string>
+    <string name="nav_food_pool">吃饭池</string>
+    <string name="nav_history">历史</string>
+    <string name="nav_settings">设置</string>
+
+    <!-- Home -->
+    <string name="home_greeting">你好，%1$s</string>
+    <string name="home_greeting_default">你好</string>
+    <string name="home_subtitle">今晚想吃点什么？</string>
+    <string name="home_entry_decide_first">先决定吃什么</string>
+    <string name="home_entry_decide_first_desc">从口味和状态开始，找到共同选择</string>
+    <string name="home_entry_pool">从我的吃饭池决定</string>
+    <string name="home_entry_pool_desc">从收藏的餐厅和选项中选一个</string>
+
+    <!-- Placeholder -->
+    <string name="placeholder_title">即将推出</string>
+    <string name="placeholder_desc">此功能将在后续版本中开发</string>
+
+    <!-- Food Pool -->
+    <string name="food_pool_title">吃饭池</string>
+    <string name="food_pool_empty">还没有吃饭选项\n从其他应用分享餐厅链接，或手动添加</string>
+
+    <!-- History -->
+    <string name="history_title">历史</string>
+    <string name="history_empty">还没有用餐记录</string>
+
+    <!-- Settings -->
+    <string name="settings_title">设置</string>
+    <string name="settings_user_name">主要用户名称</string>
+    <string name="settings_user_name_hint">输入你的名字</string>
+    <string name="settings_save">保存</string>
+    <string name="settings_saved">已保存</string>
+    <string name="settings_about">关于</string>
+    <string name="settings_version">版本 %1$s</string>
+    <string name="settings_about_desc">What2Eat - 帮助情侣共同决定今晚吃什么</string>
+</resources>
