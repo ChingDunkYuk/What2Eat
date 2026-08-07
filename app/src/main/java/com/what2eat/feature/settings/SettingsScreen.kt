@@ -1,5 +1,6 @@
 package com.what2eat.feature.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,17 +12,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,10 +41,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.what2eat.R
 import com.what2eat.domain.model.AppUsageMode
+import com.what2eat.domain.model.PersonProfile
 
 /**
  * 设置页面。
- * Stage 1.1: 新增使用模式、双人档案管理、偏好入口。
+ *
+ * 人物档案以卡片形式展示名称、编辑入口和饮食偏好入口（含摘要）。
+ * 名称编辑通过对话框完成，不再长期显示输入框和保存按钮。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,12 +57,8 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    val primaryInput = remember(uiState.primaryProfile) {
-        viewModel.getPrimaryNameInput().ifBlank { uiState.primaryProfile?.name ?: "" }
-    }
-    val secondaryInput = remember(uiState.secondaryProfile) {
-        viewModel.getSecondaryNameInput().ifBlank { uiState.secondaryProfile?.name ?: "" }
-    }
+    // 编辑对话框状态
+    var editingPerson by remember { mutableStateOf<PersonProfile?>(null) }
 
     Column(
         modifier = Modifier
@@ -101,28 +104,26 @@ fun SettingsScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        // 主用户
-        ProfileCard(
-            label = stringResource(R.string.settings_profile_primary),
-            nameInput = primaryInput,
-            onNameChange = viewModel::onPrimaryNameChange,
-            onSave = viewModel::savePrimaryName,
-            isSaving = uiState.isSaving,
-            savedMessage = if (uiState.message == "primary_saved") stringResource(R.string.settings_saved) else null,
-            onSetPreference = { onNavigateToPreference("person_primary") }
-        )
-
-        // 第二用户（仅双人模式显示）
-        if (uiState.usageMode == AppUsageMode.COUPLE) {
+        // 主用户档案卡片
+        uiState.primaryProfile?.let { primary ->
             ProfileCard(
-                label = stringResource(R.string.settings_profile_secondary),
-                nameInput = secondaryInput,
-                onNameChange = viewModel::onSecondaryNameChange,
-                onSave = viewModel::saveSecondaryName,
-                isSaving = uiState.isSaving,
-                savedMessage = if (uiState.message == "secondary_saved") stringResource(R.string.settings_saved) else null,
-                onSetPreference = { onNavigateToPreference("person_secondary") }
+                profile = primary,
+                preferenceSummary = uiState.primaryPreferenceSummary,
+                onEditClick = { editingPerson = primary },
+                onPreferenceClick = { onNavigateToPreference(primary.id) }
             )
+        }
+
+        // 第二用户档案卡片（仅双人模式显示）
+        if (uiState.usageMode == AppUsageMode.COUPLE) {
+            uiState.secondaryProfile?.let { secondary ->
+                ProfileCard(
+                    profile = secondary,
+                    preferenceSummary = uiState.secondaryPreferenceSummary,
+                    onEditClick = { editingPerson = secondary },
+                    onPreferenceClick = { onNavigateToPreference(secondary.id) }
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -144,24 +145,34 @@ fun SettingsScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
+
+    // ── 名称编辑对话框 ──
+    editingPerson?.let { person ->
+        EditNameDialog(
+            currentName = person.name,
+            isSaving = uiState.isSaving,
+            onDismiss = { editingPerson = null },
+            onSave = { newName ->
+                viewModel.saveName(person.id, newName)
+                // 保存成功后关闭对话框
+                editingPerson = null
+            }
+        )
+    }
 }
 
 /**
  * 人物档案卡片。
+ *
+ * 展示：人物名称 + 编辑入口 + 饮食偏好入口（含摘要）。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ProfileCard(
-    label: String,
-    nameInput: String,
-    onNameChange: (String) -> Unit,
-    onSave: () -> Unit,
-    isSaving: Boolean,
-    savedMessage: String?,
-    onSetPreference: () -> Unit
+    profile: PersonProfile,
+    preferenceSummary: PreferenceSummary,
+    onEditClick: () -> Unit,
+    onPreferenceClick: () -> Unit
 ) {
-    var localInput by remember(nameInput) { mutableStateOf(nameInput) }
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -174,52 +185,160 @@ private fun ProfileCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            OutlinedTextField(
-                value = localInput,
-                onValueChange = {
-                    localInput = it
-                    onNameChange(it)
-                },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Words,
-                    imeAction = ImeAction.Done
-                ),
-                enabled = !isSaving
-            )
-
+            // ── 名称行 ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Button(
-                    onClick = onSave,
-                    enabled = localInput.trim().isNotBlank() && localInput.trim().length <= 20 && !isSaving
-                ) {
-                    Text(stringResource(R.string.settings_save))
-                }
-
-                TextButton(onClick = onSetPreference) {
-                    Text(stringResource(R.string.settings_set_preference))
+                Text(
+                    text = profile.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                TextButton(onClick = onEditClick) {
+                    Icon(
+                        imageVector = Icons.Outlined.Edit,
+                        contentDescription = null,
+                        modifier = Modifier.padding(end = 4.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_edit),
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
 
-            savedMessage?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
+            // ── 饮食偏好入口 ──
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onPreferenceClick() }
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = stringResource(R.string.settings_preference),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = buildPreferenceSummaryText(preferenceSummary),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Outlined.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
     }
+}
+
+/**
+ * 构建偏好摘要文本。
+ */
+@Composable
+private fun buildPreferenceSummaryText(summary: PreferenceSummary): String {
+    return if (summary.isNotSet) {
+        stringResource(R.string.pref_summary_not_set)
+    } else {
+        val setPart = stringResource(R.string.pref_summary_set, summary.setCount)
+        val excludedPart = if (summary.excludedCount > 0) {
+            " · " + stringResource(R.string.pref_summary_excluded, summary.excludedCount)
+        } else {
+            " · " + stringResource(R.string.pref_summary_none_excluded)
+        }
+        setPart + excludedPart
+    }
+}
+
+/**
+ * 名称编辑对话框。
+ *
+ * 规则：
+ * - 名称不能为空
+ * - 自动去除首尾空格
+ * - 长度限制 1-20 字符
+ * - 名称没有变化时保存按钮禁用
+ * - 保存成功后自动关闭
+ * - 保存失败时保留编辑内容并显示错误
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditNameDialog(
+    currentName: String,
+    isSaving: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var inputText by remember { mutableStateOf(currentName) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    val trimmedInput = inputText.trim()
+    val hasChanges = trimmedInput != currentName.trim()
+    val isValid = trimmedInput.isNotBlank() && trimmedInput.length <= 20
+
+    AlertDialog(
+        onDismissRequest = { if (!isSaving) onDismiss() },
+        title = { Text(stringResource(R.string.settings_edit_name)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = inputText,
+                    onValueChange = {
+                        inputText = it
+                        error = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text(stringResource(R.string.settings_name_hint)) },
+                    isError = error != null,
+                    supportingText = {
+                        error?.let { errText ->
+                            Text(
+                                text = errText,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Words,
+                        imeAction = ImeAction.Done
+                    ),
+                    enabled = !isSaving
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val trimmed = inputText.trim()
+                    when {
+                        trimmed.isBlank() -> error = "名称不能为空"
+                        trimmed.length > 20 -> error = "名称不能超过20个字符"
+                        else -> onSave(trimmed)
+                    }
+                },
+                enabled = hasChanges && isValid && !isSaving
+            ) {
+                Text(stringResource(R.string.settings_save))
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isSaving
+            ) {
+                Text(stringResource(R.string.settings_cancel))
+            }
+        }
+    )
 }

@@ -3,8 +3,10 @@ package com.what2eat.feature.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.what2eat.domain.model.AppUsageMode
+import com.what2eat.domain.model.PersonCategoryPreference
 import com.what2eat.domain.model.PersonProfile
 import com.what2eat.domain.repository.AppUsageModeRepository
+import com.what2eat.domain.repository.PersonCategoryPreferenceRepository
 import com.what2eat.domain.repository.PersonProfileRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,48 +20,40 @@ import javax.inject.Inject
 
 /**
  * 设置页 ViewModel。
- * Stage 1.1: 支持使用模式切换和双人档案管理。
+ *
+ * 管理使用模式、双人档案、偏好摘要。
+ * 名称编辑通过对话框进行，保存后自动关闭。
  */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val personProfileRepository: PersonProfileRepository,
-    private val usageModeRepository: AppUsageModeRepository
+    private val usageModeRepository: AppUsageModeRepository,
+    private val preferenceRepository: PersonCategoryPreferenceRepository
 ) : ViewModel() {
 
     private val _isSaving = MutableStateFlow(false)
     private val _message = MutableStateFlow<String?>(null)
 
-    /** 主用户名称输入 */
-    private val _primaryNameInput = MutableStateFlow("")
-    /** 第二用户名称输入 */
-    private val _secondaryNameInput = MutableStateFlow("")
-    private val _initialized = MutableStateFlow(false)
-
     val uiState: StateFlow<SettingsUiState> = combine(
         personProfileRepository.observeAll(),
         usageModeRepository.observe(),
-        combine(_isSaving, _message, _primaryNameInput, _secondaryNameInput) { saving, msg, pName, sName ->
-            SettingsMisc(saving, msg, pName, sName)
-        }
-    ) { profiles, usageMode, misc ->
+        preferenceRepository.observeByPerson("person_primary"),
+        preferenceRepository.observeByPerson("person_secondary"),
+        combine(_isSaving, _message) { saving, msg -> saving to msg }
+    ) { profiles, usageMode, primaryPrefs, secondaryPrefs, (isSaving, message) ->
         val primary = profiles.firstOrNull { it.isPrimary }
         val secondary = profiles.firstOrNull { !it.isPrimary }
-
-        // 首次加载时初始化输入框
-        if (!_initialized.value) {
-            primary?.name?.let { if (_primaryNameInput.value.isBlank()) _primaryNameInput.value = it }
-            secondary?.name?.let { if (_secondaryNameInput.value.isBlank()) _secondaryNameInput.value = it }
-            _initialized.value = true
-        }
 
         SettingsUiState(
             usageMode = usageMode,
             profiles = profiles,
             primaryProfile = primary,
             secondaryProfile = secondary,
+            primaryPreferenceSummary = computeSummary(primaryPrefs),
+            secondaryPreferenceSummary = computeSummary(secondaryPrefs),
             isLoading = false,
-            isSaving = misc.isSaving,
-            message = misc.message
+            isSaving = isSaving,
+            message = message
         )
     }.stateIn(
         scope = viewModelScope,
@@ -67,84 +61,54 @@ class SettingsViewModel @Inject constructor(
         initialValue = SettingsUiState()
     )
 
-    /** 主用户名称输入变化 */
-    fun onPrimaryNameChange(name: String) {
-        _primaryNameInput.value = name
-        _message.value = null
+    /**
+     * 从偏好列表计算摘要。
+     * setCount: preferenceLevel != 0 的数量
+     * excludedCount: hardExcluded = true 的数量
+     */
+    private fun computeSummary(prefs: List<PersonCategoryPreference>): PreferenceSummary {
+        val setCount = prefs.count { it.preferenceLevel != 0 }
+        val excludedCount = prefs.count { it.hardExcluded }
+        return PreferenceSummary(setCount = setCount, excludedCount = excludedCount)
     }
 
-    /** 第二用户名称输入变化 */
-    fun onSecondaryNameChange(name: String) {
-        _secondaryNameInput.value = name
-        _message.value = null
-    }
-
-    /** 获取主用户名称输入框当前值 */
-    fun getPrimaryNameInput(): String = _primaryNameInput.value
-
-    /** 获取第二用户名称输入框当前值 */
-    fun getSecondaryNameInput(): String = _secondaryNameInput.value
-
-    /** 保存主用户名称 */
-    fun savePrimaryName() {
-        val name = _primaryNameInput.value.trim()
-        if (name.isBlank()) return
-        if (name.length > 20) return
+    /**
+     * 保存人物名称（通过对话框编辑后调用）。
+     * @param personId 人物 ID（"person_primary" 或 "person_secondary"）
+     * @param name 新名称（已去空格）
+     * @return 保存是否成功
+     */
+    fun saveName(personId: String, name: String) {
+        val trimmedName = name.trim()
+        if (trimmedName.isBlank()) return
+        if (trimmedName.length > 20) return
 
         viewModelScope.launch {
             _isSaving.value = true
-            val primary = personProfileRepository.observePrimary().first()
+            try {
+                val existing = personProfileRepository.getById(personId)
 
-            if (primary != null) {
-                personProfileRepository.upsert(
-                    primary.copy(name = name, updatedAt = System.currentTimeMillis())
-                )
-            } else {
-                personProfileRepository.upsert(
-                    PersonProfile(
-                        id = "person_primary",
-                        name = name,
-                        isPrimary = true,
-                        sortOrder = 0,
-                        enabled = true
+                if (existing != null) {
+                    personProfileRepository.upsert(
+                        existing.copy(name = trimmedName, updatedAt = System.currentTimeMillis())
                     )
-                )
+                } else {
+                    val isPrimary = personId == "person_primary"
+                    personProfileRepository.upsert(
+                        PersonProfile(
+                            id = personId,
+                            name = trimmedName,
+                            isPrimary = isPrimary,
+                            sortOrder = if (isPrimary) 0 else 1,
+                            enabled = true
+                        )
+                    )
+                }
+                _message.value = "name_saved"
+            } catch (e: Exception) {
+                _message.value = "name_save_error"
             }
             _isSaving.value = false
-            _message.value = "primary_saved"
-        }
-    }
-
-    /** 保存第二用户名称 */
-    fun saveSecondaryName() {
-        val name = _secondaryNameInput.value.trim()
-        if (name.isBlank()) return
-        if (name.length > 20) return
-
-        viewModelScope.launch {
-            _isSaving.value = true
-
-            // 查找现有的非主用户
-            val allProfiles = personProfileRepository.observeAll().first()
-            val secondary = allProfiles.firstOrNull { !it.isPrimary }
-
-            if (secondary != null) {
-                personProfileRepository.upsert(
-                    secondary.copy(name = name, updatedAt = System.currentTimeMillis())
-                )
-            } else {
-                personProfileRepository.upsert(
-                    PersonProfile(
-                        id = "person_secondary",
-                        name = name,
-                        isPrimary = false,
-                        sortOrder = 1,
-                        enabled = true
-                    )
-                )
-            }
-            _isSaving.value = false
-            _message.value = "secondary_saved"
         }
     }
 
@@ -192,11 +156,4 @@ class SettingsViewModel @Inject constructor(
     fun clearMessage() {
         _message.value = null
     }
-
-    private data class SettingsMisc(
-        val isSaving: Boolean,
-        val message: String?,
-        val primaryNameInput: String,
-        val secondaryNameInput: String
-    )
 }
