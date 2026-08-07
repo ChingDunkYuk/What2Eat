@@ -2,6 +2,7 @@ package com.what2eat.feature.settings
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,19 +10,24 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,6 +42,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -60,6 +67,86 @@ fun SettingsScreen(
     // 编辑对话框状态
     var editingPerson by remember { mutableStateOf<PersonProfile?>(null) }
 
+    when {
+        // ── 加载中 ──
+        uiState.isLoading -> {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        }
+
+        // ── 加载失败 ──
+        uiState.hasLoadError -> {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.WarningAmber,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                    tint = MaterialTheme.colorScheme.error
+                )
+                Text(
+                    text = stringResource(R.string.settings_load_error),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 12.dp)
+                )
+                Text(
+                    text = uiState.loadError ?: "",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(onClick = { viewModel.retryLoad() }) {
+                    Text(stringResource(R.string.settings_retry))
+                }
+            }
+        }
+
+        else -> SettingsContent(
+            uiState = uiState,
+            onNavigateToPreference = onNavigateToPreference,
+            onEditName = { editingPerson = it },
+            onRepairPrimary = viewModel::repairPrimary,
+            viewModel = viewModel
+        )
+    }
+
+    // ── 名称编辑对话框 ──
+    editingPerson?.let { person ->
+        EditNameDialog(
+            currentName = person.name,
+            isSaving = uiState.isSaving,
+            onDismiss = { editingPerson = null },
+            onSave = { newName ->
+                viewModel.saveName(person.id, newName)
+                editingPerson = null
+            }
+        )
+    }
+}
+
+/**
+ * 设置页主体内容。
+ */
+@Composable
+private fun SettingsContent(
+    uiState: SettingsUiState,
+    onNavigateToPreference: (String) -> Unit,
+    onEditName: (PersonProfile) -> Unit,
+    onRepairPrimary: (String) -> Unit,
+    viewModel: SettingsViewModel
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -109,7 +196,7 @@ fun SettingsScreen(
             ProfileCard(
                 profile = primary,
                 preferenceSummary = uiState.primaryPreferenceSummary,
-                onEditClick = { editingPerson = primary },
+                onEditClick = { onEditName(primary) },
                 onPreferenceClick = { onNavigateToPreference(primary.id) }
             )
         }
@@ -120,7 +207,7 @@ fun SettingsScreen(
                 ProfileCard(
                     profile = secondary,
                     preferenceSummary = uiState.secondaryPreferenceSummary,
-                    onEditClick = { editingPerson = secondary },
+                    onEditClick = { onEditName(secondary) },
                     onPreferenceClick = { onNavigateToPreference(secondary.id) }
                 )
             }
@@ -146,17 +233,27 @@ fun SettingsScreen(
         )
     }
 
-    // ── 名称编辑对话框 ──
-    editingPerson?.let { person ->
-        EditNameDialog(
-            currentName = person.name,
-            isSaving = uiState.isSaving,
-            onDismiss = { editingPerson = null },
-            onSave = { newName ->
-                viewModel.saveName(person.id, newName)
-                // 保存成功后关闭对话框
-                editingPerson = null
-            }
+    // ── 主用户修复对话框（情况 B：有档案但无主用户）──
+    if (uiState.needsPrimarySelection && uiState.candidatesForSelection.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = {},
+            icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
+            title = { Text(stringResource(R.string.settings_repair_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.settings_repair_desc))
+                    uiState.candidatesForSelection.forEach { candidate ->
+                        Button(
+                            onClick = { onRepairPrimary(candidate.id) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(candidate.name)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {}
         )
     }
 }

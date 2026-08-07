@@ -72,12 +72,17 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // ── 继续上次决定（有活动会话时显示）──
+        // ── 继续本次决定（有活动会话时显示）──
         if (uiState.hasActiveSession) {
+            val candidateDesc = if (uiState.candidateCount > 0) {
+                "已有 ${uiState.candidateCount} 个候选"
+            } else {
+                "你有一个未完成的选择"
+            }
             EntryCard(
                 icon = Icons.Outlined.PlayArrow,
-                title = "继续上次决定",
-                description = "你有一个未完成的决策流程",
+                title = "继续本次决定",
+                description = candidateDesc,
                 onClick = onContinueSessionClick,
                 containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                 contentColor = MaterialTheme.colorScheme.onTertiaryContainer

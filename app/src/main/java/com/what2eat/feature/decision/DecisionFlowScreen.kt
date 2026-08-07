@@ -6,21 +6,27 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Handshake
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
@@ -45,11 +51,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.what2eat.domain.model.AppUsageMode
 import com.what2eat.domain.model.BudgetLevel
 import com.what2eat.domain.model.DistanceLevel
 import com.what2eat.domain.model.FoodCategory
@@ -60,6 +69,10 @@ import com.what2eat.domain.model.SelectionType
 /**
  * 决策流程主页面。
  * 根据当前 step 渲染不同的步骤内容。
+ *
+ * Stage 2.1 精简流程：
+ * CONDITIONS(本次条件，合并参与人物+用餐方式+状态+预算+距离)
+ * → HANDOFF(双人交接) → CATEGORY_SELECT(每人本次选择) → RESULTS(候选结果)
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,13 +82,10 @@ fun DecisionFlowScreen(
     viewModel: DecisionViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     val stepTitle = when (uiState.step) {
-        DecisionStep.PARTICIPANTS -> "选择参与人物"
-        DecisionStep.MEAL_MODE -> "用餐方式"
-        DecisionStep.MOOD -> "今天的状态"
-        DecisionStep.BUDGET -> "预算"
-        DecisionStep.DISTANCE -> "距离"
+        DecisionStep.CONDITIONS -> "本次条件"
         DecisionStep.HANDOFF -> "交接"
         DecisionStep.CATEGORY_SELECT -> "本次选择"
         DecisionStep.RESULTS -> "候选结果"
@@ -84,24 +94,10 @@ fun DecisionFlowScreen(
     // BackHandler：拦截系统返回键
     BackHandler {
         when (uiState.step) {
-            DecisionStep.MEAL_MODE,
-            DecisionStep.MOOD,
-            DecisionStep.BUDGET,
-            DecisionStep.DISTANCE -> {
-                viewModel.goBack()
-            }
-            DecisionStep.PARTICIPANTS -> {
-                if (uiState.hasActiveSession) {
-                    viewModel.showExitDialog()
-                } else {
-                    onExit()
-                }
-            }
+            DecisionStep.CONDITIONS -> viewModel.handleBack(onExit)
             DecisionStep.HANDOFF,
             DecisionStep.CATEGORY_SELECT,
-            DecisionStep.RESULTS -> {
-                viewModel.showExitDialog()
-            }
+            DecisionStep.RESULTS -> viewModel.showExitDialog()
         }
     }
 
@@ -112,17 +108,7 @@ fun DecisionFlowScreen(
                 navigationIcon = {
                     IconButton(onClick = {
                         when (uiState.step) {
-                            DecisionStep.MEAL_MODE,
-                            DecisionStep.MOOD,
-                            DecisionStep.BUDGET,
-                            DecisionStep.DISTANCE -> viewModel.goBack()
-                            DecisionStep.PARTICIPANTS -> {
-                                if (uiState.hasActiveSession) {
-                                    viewModel.showExitDialog()
-                                } else {
-                                    onExit()
-                                }
-                            }
+                            DecisionStep.CONDITIONS -> viewModel.handleBack(onExit)
                             DecisionStep.HANDOFF,
                             DecisionStep.CATEGORY_SELECT,
                             DecisionStep.RESULTS -> viewModel.showExitDialog()
@@ -176,14 +162,14 @@ fun DecisionFlowScreen(
                     )
                 }
                 else -> when (uiState.step) {
-                    DecisionStep.PARTICIPANTS -> ParticipantStep(uiState, viewModel)
-                    DecisionStep.MEAL_MODE -> MealModeStep(uiState, viewModel)
-                    DecisionStep.MOOD -> MoodStep(uiState, viewModel)
-                    DecisionStep.BUDGET -> BudgetStep(uiState, viewModel)
-                    DecisionStep.DISTANCE -> DistanceStep(uiState, viewModel)
+                    DecisionStep.CONDITIONS -> ConditionsStep(uiState, viewModel)
                     DecisionStep.HANDOFF -> HandoffStep(uiState, viewModel)
-                    DecisionStep.CATEGORY_SELECT -> CategorySelectStep(uiState, viewModel)
-                    DecisionStep.RESULTS -> ResultsStep(uiState, viewModel, onCompleted)
+                    DecisionStep.CATEGORY_SELECT -> CategorySelectStep(
+                        uiState = uiState,
+                        viewModel = viewModel,
+                        keyboardController = keyboardController
+                    )
+                    DecisionStep.RESULTS -> ResultsStep(uiState, viewModel, onCompleted, keyboardController)
                 }
             }
         }
@@ -191,12 +177,39 @@ fun DecisionFlowScreen(
 
     // ── Dialogs ──
 
+    // 条件页已修改时返回首页的草稿提示
+    if (uiState.showDiscardDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.hideDiscardDialog() },
+            icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
+            title = { Text("保存草稿？") },
+            text = { Text("你已修改了本次条件。是否保存草稿以便下次继续？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.hideDiscardDialog()
+                    onExit()
+                }) {
+                    Text("保存草稿并退出")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    viewModel.confirmDiscard()
+                    onExit()
+                }) {
+                    Text("放弃修改")
+                }
+            }
+        )
+    }
+
+    // 其他步骤返回首页的退出提示
     if (uiState.showExitDialog) {
         AlertDialog(
             onDismissRequest = { viewModel.hideExitDialog() },
             icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
             title = { Text("退出决策流程") },
-            text = { Text("你有一个未完成的决策流程，是否继续？") },
+            text = { Text("你有一个进行中的决策流程，是否继续？") },
             confirmButton = {
                 TextButton(onClick = { viewModel.hideExitDialog() }) {
                     Text("继续本次决定")
@@ -210,15 +223,24 @@ fun DecisionFlowScreen(
         )
     }
 
+    // 放弃的二次确认
     if (uiState.showCancelDialog) {
+        val title = if (uiState.cancelForNewSession) "放弃并重新开始？" else "确认放弃"
+        val text = if (uiState.cancelForNewSession)
+            "放弃当前决策后将重新开始。当前数据将被删除，确定吗？"
+        else
+            "放弃后本次决策的所有数据将被删除，无法恢复。确定要放弃吗？"
         AlertDialog(
             onDismissRequest = { viewModel.hideCancelDialog() },
             icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
-            title = { Text("确认放弃") },
-            text = { Text("放弃后本次决策的所有数据将被删除，无法恢复。确定要放弃吗？") },
+            title = { Text(title) },
+            text = { Text(text) },
             confirmButton = {
-                TextButton(onClick = { viewModel.confirmCancelSession() }) {
-                    Text("确认放弃")
+                TextButton(onClick = {
+                    viewModel.confirmCancelSession()
+                    if (!uiState.cancelForNewSession) onExit()
+                }) {
+                    Text(if (uiState.cancelForNewSession) "确认放弃" else "确认放弃")
                 }
             },
             dismissButton = {
@@ -229,20 +251,21 @@ fun DecisionFlowScreen(
         )
     }
 
+    // 已有活动会话时点击"先决定吃什么"
     if (uiState.showNewSessionDialog) {
         AlertDialog(
             onDismissRequest = { viewModel.cancelNewSession() },
             icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
             title = { Text("已有未完成的决策") },
-            text = { Text("你有一个未完成的决策流程。开始新决策将放弃当前流程，确定吗？") },
+            text = { Text("你有一个进行中的决策流程。要继续现有决定，还是放弃并重新开始？") },
             confirmButton = {
                 TextButton(onClick = { viewModel.confirmNewSession() }) {
-                    Text("放弃并开始新的")
+                    Text("放弃并重新开始")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.cancelNewSession() }) {
-                    Text("取消")
+                    Text("继续现有决定")
                 }
             }
         )
@@ -297,10 +320,11 @@ private fun ErrorStateView(
     }
 }
 
-// ── Step: Participants ──
+// ── Step: CONDITIONS（合并条件页）──
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun ParticipantStep(
+private fun ConditionsStep(
     uiState: DecisionUiState,
     viewModel: DecisionViewModel
 ) {
@@ -311,214 +335,100 @@ private fun ParticipantStep(
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            text = "选择本次参与决策的人物",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Text(
-            text = if (uiState.usageMode == com.what2eat.domain.model.AppUsageMode.SINGLE)
-                "单人模式：使用主用户"
-            else
-                "双人模式：默认勾选两位，可只选其中一位",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        uiState.availableProfiles.forEach { profile ->
-            val selected = uiState.selectedParticipantIds.contains(profile.id)
-            val isPrimary = profile.isPrimary
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { viewModel.toggleParticipant(profile.id) },
-                colors = CardDefaults.cardColors(
-                    containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
-                    else MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+        // 参与人物（仅双人模式显示）
+        if (uiState.usageMode == AppUsageMode.COUPLE) {
+            Text(
+                text = "参与人物",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            uiState.availableProfiles.forEach { profile ->
+                val selected = uiState.selectedParticipantIds.contains(profile.id)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { viewModel.toggleParticipant(profile.id) },
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceVariant
+                    )
                 ) {
-                    Column {
-                        Text(
-                            text = profile.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        if (profile.isPrimary) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
                             Text(
-                                text = "主用户",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = profile.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            if (profile.isPrimary) {
+                                Text(
+                                    text = "主用户",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        if (selected) {
+                            Icon(
+                                Icons.Outlined.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
-                    }
-                    if (selected) {
-                        Icon(
-                            Icons.Outlined.Check,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-            onClick = { viewModel.confirmParticipantsAndStart() },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = uiState.selectedParticipantIds.isNotEmpty() && !uiState.isSaving
-        ) {
-            if (uiState.isSaving) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    strokeWidth = 2.dp
-                )
-            } else {
-                Text("开始")
-            }
-        }
-    }
-}
-
-// ── Step: Meal Mode ──
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
-@Composable
-private fun MealModeStep(
-    uiState: DecisionUiState,
-    viewModel: DecisionViewModel
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
+        // 怎么吃
         Text(
-            text = "选择用餐方式（可多选）",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            text = "怎么吃（可多选）",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
         )
-
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             MealMode.entries.forEach { mode ->
-                val selected = uiState.mealModes.contains(mode)
                 FilterChip(
-                    selected = selected,
+                    selected = uiState.mealModes.contains(mode),
                     onClick = { viewModel.toggleMealMode(mode) },
                     label = { Text(mode.label) }
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = { viewModel.goBack() },
-                modifier = Modifier.weight(1f)
-            ) { Text("上一步") }
-
-            Button(
-                onClick = { viewModel.confirmMealMode() },
-                modifier = Modifier.weight(1f),
-                enabled = uiState.mealModes.isNotEmpty()
-            ) { Text("下一步") }
-        }
-    }
-}
-
-// ── Step: Mood ──
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
-@Composable
-private fun MoodStep(
-    uiState: DecisionUiState,
-    viewModel: DecisionViewModel
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
+        // 今天状态
         Text(
             text = "今天的状态（可多选）",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
         )
-
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             MoodTag.entries.forEach { tag ->
-                val selected = uiState.moodTags.contains(tag)
                 FilterChip(
-                    selected = selected,
+                    selected = uiState.moodTags.contains(tag),
                     onClick = { viewModel.toggleMoodTag(tag) },
                     label = { Text(tag.label) }
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = { viewModel.goBack() },
-                modifier = Modifier.weight(1f)
-            ) { Text("上一步") }
-
-            Button(
-                onClick = { viewModel.confirmMood() },
-                modifier = Modifier.weight(1f),
-                enabled = uiState.moodTags.isNotEmpty()
-            ) { Text("下一步") }
-        }
-    }
-}
-
-// ── Step: Budget ──
-
-@Composable
-private fun BudgetStep(
-    uiState: DecisionUiState,
-    viewModel: DecisionViewModel
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
+        // 预算
         Text(
-            text = "选择预算",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            text = "预算",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
         )
-
         BudgetLevel.entries.forEach { level ->
             val selected = uiState.budgetLevel == level
             Card(
@@ -545,45 +455,12 @@ private fun BudgetStep(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = { viewModel.goBack() },
-                modifier = Modifier.weight(1f)
-            ) { Text("上一步") }
-
-            Button(
-                onClick = { viewModel.confirmBudget() },
-                modifier = Modifier.weight(1f)
-            ) { Text("下一步") }
-        }
-    }
-}
-
-// ── Step: Distance ──
-
-@Composable
-private fun DistanceStep(
-    uiState: DecisionUiState,
-    viewModel: DecisionViewModel
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
+        // 距离
         Text(
-            text = "选择距离",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            text = "距离",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
         )
-
         DistanceLevel.entries.forEach { level ->
             val selected = uiState.distanceLevel == level
             Card(
@@ -610,31 +487,34 @@ private fun DistanceStep(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        Row(
+        // 就地防御性提示（不跳转整页错误）
+        uiState.conditionsInlineError?.let { inlineError ->
+            Text(
+                text = inlineError,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+            )
+        }
+
+        // 底部统一按钮
+        Button(
+            onClick = { viewModel.confirmConditions() },
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            enabled = !uiState.isSaving
         ) {
-            OutlinedButton(
-                onClick = { viewModel.goBack() },
-                modifier = Modifier.weight(1f)
-            ) { Text("上一步") }
-
-            Button(
-                onClick = { viewModel.confirmDistanceAndSaveConditions() },
-                modifier = Modifier.weight(1f),
-                enabled = !uiState.isSaving
-            ) {
-                if (uiState.isSaving) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Text("开始选择")
-                }
+            if (uiState.isSaving) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Text("下一步：选择想吃什么")
             }
         }
     }
@@ -701,11 +581,12 @@ private fun HandoffStep(
 
 // ── Step: Category Selection ──
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun CategorySelectStep(
     uiState: DecisionUiState,
-    viewModel: DecisionViewModel
+    viewModel: DecisionViewModel,
+    keyboardController: androidx.compose.ui.platform.SoftwareKeyboardController?
 ) {
     val personName = uiState.currentSelectingPerson?.name ?: "用户"
 
@@ -719,52 +600,47 @@ private fun CategorySelectStep(
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
         )
+        Text(
+            text = "选择会自动保存",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 20.dp)
+        )
 
-        // 选择计数 + 自动保存提示
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = "想吃 ${uiState.currentWantCount}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "接受 ${uiState.currentAcceptCount}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.secondary,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "不吃 ${uiState.currentNotTodayCount}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
-            Text(
-                text = "已自动保存",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // 搜索栏
+        // 搜索栏（实时过滤 + 结果数量 + 清除按钮）
         OutlinedTextField(
             value = uiState.searchQuery,
             onValueChange = { viewModel.setSearchQuery(it) },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp),
             placeholder = { Text("搜索分类") },
             leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-            singleLine = true
+            trailingIcon = {
+                if (uiState.searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { viewModel.clearSearch() }) {
+                        Icon(Icons.Outlined.Close, contentDescription = "清除搜索")
+                    }
+                }
+            },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = {
+                keyboardController?.hide()
+            })
         )
+
+        // 搜索结果数量提示
+        if (uiState.searchQuery.trim().isNotEmpty()) {
+            Text(
+                text = "找到 ${uiState.searchResultCount} 个分类",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+            )
+        }
 
         if (uiState.isSearchEmpty) {
             // 搜索无结果空状态
@@ -794,7 +670,7 @@ private fun CategorySelectStep(
             // 分类列表
             LazyColumn(
                 modifier = Modifier.weight(1f),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                contentPadding = PaddingValues(
                     horizontal = 16.dp,
                     vertical = 8.dp
                 ),
@@ -806,32 +682,40 @@ private fun CategorySelectStep(
                         children = group.children,
                         hardExcludedIds = uiState.hardExcludedCategoryIds,
                         selections = uiState.currentPersonSelections,
-                        onSelectionChange = viewModel::setCategorySelection
+                        onSelect = viewModel::setCategorySelection,
+                        onClear = viewModel::clearCategorySelection
                     )
                 }
             }
         }
 
-        // 底部完成按钮
+        // 底部生成候选按钮（IME 弹出时自动上移，不被遮挡）
         Button(
-            onClick = { viewModel.completeCurrentPersonSelection() },
+            onClick = {
+                keyboardController?.hide()
+                viewModel.completeCurrentPersonSelection()
+            },
             modifier = Modifier
                 .fillMaxWidth()
+                .navigationBarsPadding()
+                .imePadding()
                 .padding(16.dp),
             enabled = uiState.currentWantCount + uiState.currentAcceptCount > 0
         ) {
-            Text("完成本次选择")
+            Text("生成候选")
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun CategoryGroupCard(
     rootCategory: FoodCategory,
     children: List<FoodCategory>,
     hardExcludedIds: Set<String>,
     selections: Map<String, SelectionType>,
-    onSelectionChange: (String, SelectionType) -> Unit
+    onSelect: (String, SelectionType) -> Unit,
+    onClear: (String) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -855,51 +739,79 @@ private fun CategoryGroupCard(
                 val isExcluded = hardExcludedIds.contains(child.id)
                 val currentSelection = selections[child.id]
 
-                Row(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(
-                        text = child.name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (isExcluded) MaterialTheme.colorScheme.outline
-                        else MaterialTheme.colorScheme.onSurface
-                    )
-
-                    if (isExcluded) {
-                        // 长期硬排除，不可选
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                Icons.Outlined.Block,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(
-                                text = "长期不吃",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    } else {
-                        // 三选一
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            SelectionType.entries.forEach { type ->
-                                val label = when (type) {
-                                    SelectionType.WANT -> "想吃"
-                                    SelectionType.ACCEPT -> "接受"
-                                    SelectionType.NOT_TODAY -> "不吃"
-                                }
-                                FilterChip(
-                                    selected = currentSelection == type,
-                                    onClick = { onSelectionChange(child.id, type) },
-                                    label = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = child.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (isExcluded) MaterialTheme.colorScheme.outline
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+                        if (isExcluded) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Block,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "长期不吃",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error
                                 )
                             }
+                        }
+                    }
+
+                    if (!isExcluded) {
+                        // 四选一状态：想吃/可以/不吃/未选择
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            SelectionChip(
+                                label = "想吃",
+                                selected = currentSelection == SelectionType.WANT,
+                                color = MaterialTheme.colorScheme.primary,
+                                onClick = {
+                                    if (currentSelection == SelectionType.WANT) onClear(child.id)
+                                    else onSelect(child.id, SelectionType.WANT)
+                                }
+                            )
+                            SelectionChip(
+                                label = "可以",
+                                selected = currentSelection == SelectionType.ACCEPT,
+                                color = MaterialTheme.colorScheme.secondary,
+                                onClick = {
+                                    if (currentSelection == SelectionType.ACCEPT) onClear(child.id)
+                                    else onSelect(child.id, SelectionType.ACCEPT)
+                                }
+                            )
+                            SelectionChip(
+                                label = "不吃",
+                                selected = currentSelection == SelectionType.NOT_TODAY,
+                                color = MaterialTheme.colorScheme.error,
+                                onClick = {
+                                    if (currentSelection == SelectionType.NOT_TODAY) onClear(child.id)
+                                    else onSelect(child.id, SelectionType.NOT_TODAY)
+                                }
+                            )
+                            SelectionChip(
+                                label = "未选择",
+                                selected = currentSelection == null,
+                                color = MaterialTheme.colorScheme.outline,
+                                onClick = { onClear(child.id) }
+                            )
                         }
                     }
                 }
@@ -908,13 +820,33 @@ private fun CategoryGroupCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SelectionChip(
+    label: String,
+    selected: Boolean,
+    color: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+        colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+            selectedContainerColor = color.copy(alpha = 0.2f),
+            selectedLabelColor = color
+        )
+    )
+}
+
 // ── Step: Results ──
 
 @Composable
 private fun ResultsStep(
     uiState: DecisionUiState,
     viewModel: DecisionViewModel,
-    onCompleted: () -> Unit
+    onCompleted: () -> Unit,
+    keyboardController: androidx.compose.ui.platform.SoftwareKeyboardController?
 ) {
     val title = if (uiState.isDualMode) "你们的共同候选" else "符合本次条件的候选"
 
@@ -967,9 +899,7 @@ private fun ResultsStep(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedButton(
-                    onClick = {
-                        viewModel.showExitDialog()
-                    },
+                    onClick = { viewModel.showExitDialog() },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("放弃本次决定")
@@ -978,7 +908,7 @@ private fun ResultsStep(
         } else {
             LazyColumn(
                 modifier = Modifier.weight(1f),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                contentPadding = PaddingValues(
                     horizontal = 16.dp,
                     vertical = 8.dp
                 ),
@@ -1026,14 +956,19 @@ private fun ResultsStep(
                 }
             }
 
-            // 本轮只生成候选，不进入最终决定。保存候选(会话保持 READY)，返回首页后可"继续上次决定"。
+            // 保存候选（会话保持 READY），返回首页后显示"继续本次决定"
             Button(
-                onClick = { onCompleted() },
+                onClick = {
+                    keyboardController?.hide()
+                    onCompleted()
+                },
                 modifier = Modifier
                     .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .imePadding()
                     .padding(16.dp)
             ) {
-                Text("保存候选，稍后继续")
+                Text("保存候选，返回首页")
             }
         }
     }

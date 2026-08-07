@@ -31,8 +31,12 @@
     <!-- Settings -->
     <string name="settings_title">设置</string>
     <string name="settings_about">关于</string>
-    <string name="settings_about_desc">What2Eat - 帮助情侣共同决定今晚吃什么</string>
+    <string name="settings_about_desc">What2Eat - 叽里咕噜说啥呢，吃你-晴</string>
     <string name="settings_version">版本 %1$s</string>
+    <string name="settings_load_error">人物档案加载失败</string>
+    <string name="settings_retry">重试</string>
+    <string name="settings_repair_title">修复人物档案</string>
+    <string name="settings_repair_desc">系统无法识别谁是主用户，请选择"我"对应的档案：</string>
 
     <!-- Settings: Usage Mode -->
     <string name="settings_usage_mode">使用模式</string>

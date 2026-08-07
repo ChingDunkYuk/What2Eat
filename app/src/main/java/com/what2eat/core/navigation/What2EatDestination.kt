@@ -46,9 +46,10 @@ sealed class BottomNavDestination(
 object What2EatRoutes {
     const val PLACEHOLDER_POOL = "placeholder/pool"
     const val PREFERENCE = "preference/{personId}"
-    const val DECISION_FLOW = "decision_flow"
+    const val DECISION_FLOW = "decision_flow?startNew={startNew}"
 
     fun preferenceRoute(personId: String): String = "preference/$personId"
+    fun decisionFlowRoute(startNew: Boolean): String = "decision_flow?startNew=$startNew"
 }
 
 /** 底部导航项列表 */

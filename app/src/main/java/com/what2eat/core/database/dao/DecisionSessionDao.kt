@@ -10,10 +10,10 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface DecisionSessionDao {
 
-    @Query("SELECT * FROM decision_session WHERE status IN (0, 1) ORDER BY createdAt DESC LIMIT 1")
+    @Query("SELECT * FROM decision_session WHERE status IN (0, 1, 2) ORDER BY createdAt DESC LIMIT 1")
     fun observeActiveSession(): Flow<DecisionSessionEntity?>
 
-    @Query("SELECT * FROM decision_session WHERE status IN (0, 1) ORDER BY createdAt DESC LIMIT 1")
+    @Query("SELECT * FROM decision_session WHERE status IN (0, 1, 2) ORDER BY createdAt DESC LIMIT 1")
     suspend fun getActiveSession(): DecisionSessionEntity?
 
     @Query("SELECT * FROM decision_session ORDER BY createdAt DESC")
@@ -22,7 +22,7 @@ interface DecisionSessionDao {
     @Query("SELECT * FROM decision_session WHERE id = :id")
     suspend fun getById(id: String): DecisionSessionEntity?
 
-    @Query("SELECT COUNT(*) FROM decision_session WHERE status IN (0, 1)")
+    @Query("SELECT COUNT(*) FROM decision_session WHERE status IN (0, 1, 2)")
     suspend fun countActiveSessions(): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

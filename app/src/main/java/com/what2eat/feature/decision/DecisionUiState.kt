@@ -11,13 +11,9 @@ import com.what2eat.domain.model.PersonCategoryPreference
 import com.what2eat.domain.model.PersonProfile
 import com.what2eat.domain.model.SelectionType
 
-/** 决策流程步骤 */
+/** 决策流程步骤（Stage 2.1 精简流程） */
 enum class DecisionStep {
-    PARTICIPANTS,    // 选择参与人物
-    MEAL_MODE,       // 用餐方式
-    MOOD,            // 今天的状态
-    BUDGET,          // 预算
-    DISTANCE,        // 距离
+    CONDITIONS,      // 本次条件（参与人物+用餐方式+状态+预算+距离，合并为单页）
     HANDOFF,         // 双人交接（请将手机交给...）
     CATEGORY_SELECT, // 每人本次选择
     RESULTS          // 候选结果
@@ -31,7 +27,7 @@ data class CategoryGroup(
 
 /** 决策流程 UI 状态 */
 data class DecisionUiState(
-    val step: DecisionStep = DecisionStep.PARTICIPANTS,
+    val step: DecisionStep = DecisionStep.CONDITIONS,
     val activeSessionId: String? = null,
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
@@ -42,9 +38,17 @@ data class DecisionUiState(
 
     // 错误状态
     val errorMessage: String? = null,
+    /** 本次条件页的就地提示（显示在当前条件页内，不跳转整页错误） */
+    val conditionsInlineError: String? = null,
     val showExitDialog: Boolean = false,
     val showNewSessionDialog: Boolean = false,
     val showCancelDialog: Boolean = false,
+    // 放弃确认框是否来自"放弃并重新开始"（true=取消后进入新流程，false=取消后退出）
+    val cancelForNewSession: Boolean = false,
+    // 条件页已修改但未保存时返回首页的草稿提示
+    val showDiscardDialog: Boolean = false,
+    // 条件页是否存在未保存修改
+    val conditionsModified: Boolean = false,
 
     // 参与者
     val availableProfiles: List<PersonProfile> = emptyList(),
@@ -55,7 +59,8 @@ data class DecisionUiState(
 
     // 条件
     val mealModes: Set<MealMode> = emptySet(),
-    val moodTags: Set<MoodTag> = emptySet(),
+    /** 今天的状态，默认"没什么要求"（正常流程不应为空） */
+    val moodTags: Set<MoodTag> = setOf(MoodTag.NO_REQUIREMENT),
     val budgetLevel: BudgetLevel = BudgetLevel.UNLIMITED,
     val distanceLevel: DistanceLevel = DistanceLevel.UNLIMITED,
 
@@ -77,13 +82,17 @@ data class DecisionUiState(
     val currentSelectingPerson: PersonProfile?
         get() = availableProfiles.firstOrNull { it.id == currentSelectingPersonId }
 
+    /** 当前主用户 */
+    val primaryProfile: PersonProfile?
+        get() = availableProfiles.firstOrNull { it.isPrimary }
+
     /** 是否有活动会话 */
     val hasActiveSession: Boolean get() = activeSessionId != null
 
     /** 是否有错误 */
     val hasError: Boolean get() = errorMessage != null
 
-    /** 是否双人模式 */
+    /** 是否双人模式（使用模式为 COUPLE 且选择人数 > 1） */
     val isDualMode: Boolean get() = selectedParticipantIds.size > 1
 
     /** 当前人物的选择统计 */
@@ -99,6 +108,10 @@ data class DecisionUiState(
     /** 搜索后是否为空（搜了但无结果） */
     val isSearchEmpty: Boolean
         get() = searchQuery.trim().isNotEmpty() && filteredGroups.isEmpty()
+
+    /** 搜索结果数量（命中的二级分类总数） */
+    val searchResultCount: Int
+        get() = filteredGroups.sumOf { it.children.size }
 
     /**
      * 过滤后的分类分组（子分类级别过滤）。

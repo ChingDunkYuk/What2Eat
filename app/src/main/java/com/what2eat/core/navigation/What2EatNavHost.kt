@@ -90,13 +90,13 @@ fun What2EatNavHost() {
             composable(BottomNavDestination.Home.route) {
                 HomeScreen(
                     onDecideFirstClick = {
-                        navController.navigate(What2EatRoutes.DECISION_FLOW)
+                        navController.navigate(What2EatRoutes.decisionFlowRoute(startNew = true))
                     },
                     onPoolDecideClick = {
                         navController.navigate(What2EatRoutes.PLACEHOLDER_POOL)
                     },
                     onContinueSessionClick = {
-                        navController.navigate(What2EatRoutes.DECISION_FLOW)
+                        navController.navigate(What2EatRoutes.decisionFlowRoute(startNew = false))
                     }
                 )
             }
@@ -141,7 +141,15 @@ fun What2EatNavHost() {
 
             // ── 决策流程页面 ──
 
-            composable(What2EatRoutes.DECISION_FLOW) {
+            composable(
+                route = What2EatRoutes.DECISION_FLOW,
+                arguments = listOf(
+                    navArgument("startNew") {
+                        type = NavType.BoolType
+                        defaultValue = false
+                    }
+                )
+            ) {
                 DecisionFlowScreen(
                     onExit = { navController.popBackStack() },
                     onCompleted = { navController.popBackStack() }
