@@ -317,8 +317,18 @@ private fun ParticipantStep(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
+        Text(
+            text = if (uiState.usageMode == com.what2eat.domain.model.AppUsageMode.SINGLE)
+                "单人模式：使用主用户"
+            else
+                "双人模式：默认勾选两位，可只选其中一位",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
         uiState.availableProfiles.forEach { profile ->
             val selected = uiState.selectedParticipantIds.contains(profile.id)
+            val isPrimary = profile.isPrimary
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { viewModel.toggleParticipant(profile.id) },
@@ -707,32 +717,40 @@ private fun CategorySelectStep(
             text = "$personName 的本次选择",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
         )
 
-        // 选择计数
+        // 选择计数 + 自动保存提示
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "想吃 ${uiState.currentWantCount}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "接受 ${uiState.currentAcceptCount}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.secondary,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "不吃 ${uiState.currentNotTodayCount}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
             Text(
-                text = "想吃 ${uiState.currentWantCount}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = "接受 ${uiState.currentAcceptCount}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.secondary,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = "不吃 ${uiState.currentNotTodayCount}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.outline
+                text = "已自动保存",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary
             )
         }
 
@@ -748,21 +766,44 @@ private fun CategorySelectStep(
             singleLine = true
         )
 
-        // 分类列表
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                horizontal = 16.dp,
-                vertical = 8.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(uiState.filteredRootCategories) { root ->
-                val children = uiState.allCategories.filter { it.parentId == root.id }
-                if (children.isNotEmpty()) {
+        if (uiState.isSearchEmpty) {
+            // 搜索无结果空状态
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Search,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                    tint = MaterialTheme.colorScheme.outline
+                )
+                Text(
+                    text = "未找到与「${uiState.searchQuery.trim()}」相关的分类",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 12.dp)
+                )
+            }
+        } else {
+            // 分类列表
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    horizontal = 16.dp,
+                    vertical = 8.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(uiState.filteredGroups) { group ->
                     CategoryGroupCard(
-                        rootCategory = root,
-                        children = children,
+                        rootCategory = group.root,
+                        children = group.children,
                         hardExcludedIds = uiState.hardExcludedCategoryIds,
                         selections = uiState.currentPersonSelections,
                         onSelectionChange = viewModel::setCategorySelection
@@ -779,7 +820,7 @@ private fun CategorySelectStep(
                 .padding(16.dp),
             enabled = uiState.currentWantCount + uiState.currentAcceptCount > 0
         ) {
-            Text("完成选择")
+            Text("完成本次选择")
         }
     }
 }
@@ -875,11 +916,13 @@ private fun ResultsStep(
     viewModel: DecisionViewModel,
     onCompleted: () -> Unit
 ) {
+    val title = if (uiState.isDualMode) "你们的共同候选" else "符合本次条件的候选"
+
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
         Text(
-            text = "候选分类",
+            text = title,
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
@@ -942,7 +985,7 @@ private fun ResultsStep(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(uiState.candidates) { candidate ->
-                    val matchDesc = viewModel.getCandidateMatchDescription(candidate)
+                    val reasonLines = viewModel.getCandidateReasonLines(candidate)
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
@@ -970,27 +1013,27 @@ private fun ResultsStep(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Text(
-                                text = matchDesc,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
+                            reasonLines.forEach { line ->
+                                Text(
+                                    text = line,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
 
+            // 本轮只生成候选，不进入最终决定。保存候选(会话保持 READY)，返回首页后可"继续上次决定"。
             Button(
-                onClick = {
-                    viewModel.completeSession()
-                    onCompleted()
-                },
+                onClick = { onCompleted() },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
             ) {
-                Text("完成本次决策")
+                Text("保存候选，稍后继续")
             }
         }
     }

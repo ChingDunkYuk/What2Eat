@@ -1,11 +1,13 @@
 package com.what2eat.feature.decision
 
+import com.what2eat.domain.model.AppUsageMode
 import com.what2eat.domain.model.BudgetLevel
 import com.what2eat.domain.model.CandidateCategory
 import com.what2eat.domain.model.DistanceLevel
 import com.what2eat.domain.model.FoodCategory
 import com.what2eat.domain.model.MealMode
 import com.what2eat.domain.model.MoodTag
+import com.what2eat.domain.model.PersonCategoryPreference
 import com.what2eat.domain.model.PersonProfile
 import com.what2eat.domain.model.SelectionType
 
@@ -21,6 +23,12 @@ enum class DecisionStep {
     RESULTS          // 候选结果
 }
 
+/** 一个分类分组：一级分类 + 其子分类（可能被搜索过滤） */
+data class CategoryGroup(
+    val root: FoodCategory,
+    val children: List<FoodCategory>
+)
+
 /** 决策流程 UI 状态 */
 data class DecisionUiState(
     val step: DecisionStep = DecisionStep.PARTICIPANTS,
@@ -28,6 +36,9 @@ data class DecisionUiState(
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
     val message: String? = null,
+
+    // 使用模式
+    val usageMode: AppUsageMode = AppUsageMode.SINGLE,
 
     // 错误状态
     val errorMessage: String? = null,
@@ -55,6 +66,9 @@ data class DecisionUiState(
     val allPersonSelections: Map<String, Map<String, SelectionType>> = emptyMap(),
     val searchQuery: String = "",
 
+    // 当前人物的长期偏好（categoryId -> preference），用于候选解释
+    val currentPersonPreferences: Map<String, PersonCategoryPreference> = emptyMap(),
+
     // 结果
     val candidates: List<CandidateCategory> = emptyList(),
     val isGeneratingCandidates: Boolean = false
@@ -69,6 +83,9 @@ data class DecisionUiState(
     /** 是否有错误 */
     val hasError: Boolean get() = errorMessage != null
 
+    /** 是否双人模式 */
+    val isDualMode: Boolean get() = selectedParticipantIds.size > 1
+
     /** 当前人物的选择统计 */
     val currentWantCount: Int
         get() = currentPersonSelections.values.count { it == SelectionType.WANT }
@@ -79,16 +96,32 @@ data class DecisionUiState(
     val currentNotTodayCount: Int
         get() = currentPersonSelections.values.count { it == SelectionType.NOT_TODAY }
 
-    /** 过滤后的分类列表（搜索） */
-    val filteredRootCategories: List<FoodCategory>
+    /** 搜索后是否为空（搜了但无结果） */
+    val isSearchEmpty: Boolean
+        get() = searchQuery.trim().isNotEmpty() && filteredGroups.isEmpty()
+
+    /**
+     * 过滤后的分类分组（子分类级别过滤）。
+     * - 输入"粤菜"只显示粤菜（其一级分类下只保留匹配子分类）
+     * - 输入"火锅"匹配一级分类及其子分类
+     * - 清空搜索恢复完整列表
+     */
+    val filteredGroups: List<CategoryGroup>
         get() {
             val roots = allCategories.filter { it.parentId == null }
-            if (searchQuery.isBlank()) return roots
             val query = searchQuery.trim()
-            return roots.filter { root ->
-                val children = allCategories.filter { it.parentId == root.id }
-                root.name.contains(query, ignoreCase = true) ||
-                    children.any { it.name.contains(query, ignoreCase = true) }
+            val hasQuery = query.isNotEmpty()
+            return roots.mapNotNull { root ->
+                val allChildren = allCategories.filter { it.parentId == root.id }
+                val children = if (hasQuery) {
+                    allChildren.filter { child ->
+                        child.name.contains(query, ignoreCase = true) ||
+                            root.name.contains(query, ignoreCase = true)
+                    }
+                } else {
+                    allChildren
+                }
+                if (children.isNotEmpty()) CategoryGroup(root = root, children = children) else null
             }
         }
 }

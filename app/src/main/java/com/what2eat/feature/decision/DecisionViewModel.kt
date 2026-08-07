@@ -3,6 +3,7 @@ package com.what2eat.feature.decision
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.what2eat.domain.model.AppUsageMode
 import com.what2eat.domain.model.BudgetLevel
 import com.what2eat.domain.model.CandidateCategory
 import com.what2eat.domain.model.DecisionSession
@@ -10,6 +11,7 @@ import com.what2eat.domain.model.DistanceLevel
 import com.what2eat.domain.model.FoodCategory
 import com.what2eat.domain.model.MealMode
 import com.what2eat.domain.model.MoodTag
+import com.what2eat.domain.model.PersonCategoryPreference
 import com.what2eat.domain.model.PersonProfile
 import com.what2eat.domain.model.SelectionType
 import com.what2eat.domain.model.SessionCategorySelection
@@ -55,16 +57,23 @@ class DecisionViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 Log.d(TAG, "loadInitialData: start")
-                val profiles = personProfileRepository.observeEnabled().first()
+                val usageMode = usageModeRepository.get()
+                val allEnabledProfiles = personProfileRepository.observeEnabled().first()
+                // 单人模式：始终只使用主用户（isPrimary=true），不依赖列表顺序/first()
+                val profiles = if (usageMode == AppUsageMode.SINGLE) {
+                    allEnabledProfiles.filter { it.isPrimary }
+                } else {
+                    allEnabledProfiles
+                }
                 val allCategories = foodCategoryRepository.observeAll().first()
                 val activeSession = sessionRepository.observeActiveSession().first()
 
-                Log.d(TAG, "loadInitialData: profiles=${profiles.size}, categories=${allCategories.size}, activeSession=${activeSession != null}")
+                Log.d(TAG, "loadInitialData: usageMode=$usageMode, profiles=${profiles.size}, categories=${allCategories.size}, activeSession=${activeSession != null}")
 
                 if (profiles.isEmpty()) {
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        errorMessage = "未找到已启用的人物档案，请先在设置中创建人物档案"
+                        errorMessage = "未找到可用的主用户档案，请先在设置中创建/启用主用户"
                     )
                     return@launch
                 }
@@ -79,11 +88,12 @@ class DecisionViewModel @Inject constructor(
 
                 if (activeSession != null) {
                     Log.d(TAG, "loadInitialData: restoring session ${activeSession.id}")
-                    restoreSession(activeSession, profiles, allCategories)
+                    restoreSession(activeSession, profiles, allCategories, usageMode)
                 } else {
                     _uiState.value = _uiState.value.copy(
                         availableProfiles = profiles,
                         allCategories = allCategories,
+                        usageMode = usageMode,
                         isLoading = false,
                         selectedParticipantIds = profiles.map { it.id }.toSet()
                     )
@@ -101,7 +111,8 @@ class DecisionViewModel @Inject constructor(
     private suspend fun restoreSession(
         session: DecisionSession,
         profiles: List<PersonProfile>,
-        allCategories: List<FoodCategory>
+        allCategories: List<FoodCategory>,
+        usageMode: AppUsageMode
     ) {
         try {
             val participants = sessionRepository.getParticipants(session.id)
@@ -141,9 +152,11 @@ class DecisionViewModel @Inject constructor(
             // 如果在分类选择步骤，加载当前人物的选择
             val currentPersonId = participants.firstOrNull { !it.completed }?.personId
             var currentSelections: Map<String, SelectionType> = emptyMap()
+            var currentPrefs: Map<String, PersonCategoryPreference> = emptyMap()
             if (currentPersonId != null && step == DecisionStep.CATEGORY_SELECT) {
                 val selections = sessionRepository.getSelections(session.id, currentPersonId)
                 currentSelections = selections.associate { it.categoryId to it.selectionType }
+                currentPrefs = preferenceRepository.getByPerson(currentPersonId).associateBy { it.categoryId }
             }
 
             // 如果恢复到结果页，重新生成候选
@@ -156,6 +169,7 @@ class DecisionViewModel @Inject constructor(
                 activeSessionId = session.id,
                 availableProfiles = profiles,
                 allCategories = allCategories,
+                usageMode = usageMode,
                 selectedParticipantIds = selectedIds,
                 mealModes = session.mealModes,
                 moodTags = session.moodTags,
@@ -167,6 +181,7 @@ class DecisionViewModel @Inject constructor(
                 currentSelectingPersonIndex = participants.indexOfFirst { !it.completed }.coerceAtLeast(0),
                 participantsCompleted = participants.filter { it.completed }.map { it.personId },
                 currentPersonSelections = currentSelections,
+                currentPersonPreferences = currentPrefs,
                 candidates = candidates,
                 step = step,
                 isLoading = false
@@ -358,7 +373,8 @@ class DecisionViewModel @Inject constructor(
                     )
                 )
 
-                val firstPersonId = selectedIds.first()
+                val orderedIds = orderedParticipantIds()
+                val firstPersonId = orderedIds.first()
                 val isDual = selectedIds.size > 1
 
                 _uiState.value = _uiState.value.copy(
@@ -429,7 +445,7 @@ class DecisionViewModel @Inject constructor(
     fun completeCurrentPersonSelection() {
         val sessionId = _uiState.value.activeSessionId ?: return
         val personId = _uiState.value.currentSelectingPersonId ?: return
-        val selectedIds = _uiState.value.selectedParticipantIds.toList()
+        val selectedIds = orderedParticipantIds()
         val currentIndex = _uiState.value.currentSelectingPersonIndex
 
         // 校验：至少选择一个 WANT 或 ACCEPT
@@ -502,34 +518,55 @@ class DecisionViewModel @Inject constructor(
 
     // ── Candidate Match Description ──
 
-    fun getCandidateMatchDescription(candidate: CandidateCategory): String {
+    /** 生成候选匹配原因的多行文本 */
+    fun getCandidateReasonLines(candidate: CandidateCategory): List<String> {
         val profiles = _uiState.value.availableProfiles
-        val selectedIds = _uiState.value.selectedParticipantIds.toList()
+        val orderedIds = orderedParticipantIds()
 
-        if (selectedIds.size == 1) {
-            val name = profiles.firstOrNull { it.id == selectedIds[0] }?.name ?: "用户"
-            val sel = candidate.selectionsByPerson[selectedIds[0]]
-            return when (sel) {
-                SelectionType.WANT -> "${name}想吃"
-                SelectionType.ACCEPT -> "${name}可以接受"
-                else -> ""
+        if (orderedIds.size == 1) {
+            val personId = orderedIds[0]
+            val sel = candidate.selectionsByPerson[personId]
+            val selectionLabel = when (sel) {
+                SelectionType.WANT -> "想吃"
+                SelectionType.ACCEPT -> "可以接受"
+                else -> "未选择"
             }
+            val lines = mutableListOf("本次选择：$selectionLabel")
+            // 长期偏好
+            val pref = _uiState.value.currentPersonPreferences[candidate.categoryId]
+            val prefLabel = pref?.let { preferenceLevelLabel(it.preferenceLevel) } ?: "未设置"
+            lines.add("长期偏好：$prefLabel")
+            return lines
         }
 
-        if (selectedIds.size >= 2) {
-            val name1 = profiles.firstOrNull { it.id == selectedIds[0] }?.name ?: "用户1"
-            val name2 = profiles.firstOrNull { it.id == selectedIds[1] }?.name ?: "用户2"
-            val sel1 = candidate.selectionsByPerson[selectedIds[0]]
-            val sel2 = candidate.selectionsByPerson[selectedIds[1]]
-            return when {
-                sel1 == SelectionType.WANT && sel2 == SelectionType.WANT -> "双方都想吃"
-                sel1 == SelectionType.WANT -> "${name1}想吃，${name2}可以接受"
-                sel2 == SelectionType.WANT -> "${name2}想吃，${name1}可以接受"
-                else -> "双方都可以接受"
+        if (orderedIds.size >= 2) {
+            val lines = mutableListOf<String>()
+            for (personId in orderedIds) {
+                val name = profiles.firstOrNull { it.id == personId }?.name ?: "用户"
+                val sel = candidate.selectionsByPerson[personId]
+                val label = when (sel) {
+                    SelectionType.WANT -> "想吃"
+                    SelectionType.ACCEPT -> "可以接受"
+                    else -> "未选择"
+                }
+                lines.add("$name：$label")
             }
+            return lines
         }
 
-        return ""
+        return emptyList()
+    }
+
+    /** 偏好等级 → 展示文案 */
+    fun preferenceLevelLabel(level: Int): String {
+        return when (level) {
+            -2 -> "非常不喜欢"
+            -1 -> "不太喜欢"
+            0 -> "无所谓"
+            1 -> "喜欢"
+            2 -> "非常喜欢"
+            else -> "无所谓"
+         }
     }
 
     /** 获取上一位完成选择的人物名称（用于交接页） */
@@ -627,7 +664,7 @@ class DecisionViewModel @Inject constructor(
 
     /** 从结果页返回修改选择 */
     fun goBackToFirstPersonSelection() {
-        val selectedIds = _uiState.value.selectedParticipantIds.toList()
+        val selectedIds = orderedParticipantIds()
         val sessionId = _uiState.value.activeSessionId
         if (selectedIds.isEmpty() || sessionId == null) return
 
@@ -672,7 +709,7 @@ class DecisionViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(errorMessage = null)
     }
 
-    /** 获取当前人物已保存的选择 */
+    /** 获取当前人物已保存的选择及长期偏好 */
     fun loadCurrentPersonSelections() {
         val sessionId = _uiState.value.activeSessionId ?: return
         val personId = _uiState.value.currentSelectingPersonId ?: return
@@ -681,8 +718,13 @@ class DecisionViewModel @Inject constructor(
             try {
                 val selections = sessionRepository.getSelections(sessionId, personId)
                 val selectionMap = selections.associate { it.categoryId to it.selectionType }
-                _uiState.value = _uiState.value.copy(currentPersonSelections = selectionMap)
-                Log.d(TAG, "loadCurrentPersonSelections: personId=$personId, selections=${selectionMap.size}")
+                val prefs = preferenceRepository.getByPerson(personId)
+                val prefMap = prefs.associateBy { it.categoryId }
+                _uiState.value = _uiState.value.copy(
+                    currentPersonSelections = selectionMap,
+                    currentPersonPreferences = prefMap
+                )
+                Log.d(TAG, "loadCurrentPersonSelections: personId=$personId, selections=${selectionMap.size}, prefs=${prefMap.size}")
             } catch (e: Exception) {
                 Log.e(TAG, "loadCurrentPersonSelections: failed", e)
                 _uiState.value = _uiState.value.copy(
@@ -692,12 +734,40 @@ class DecisionViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 参与者确定顺序列表：主用户（isPrimary）始终排在第一位，
+     * 其余按 availableProfiles 已有顺序。不依赖 Set.first() 的迭代顺序。
+     */
+    private fun orderedParticipantIds(): List<String> {
+        val profiles = _uiState.value.availableProfiles
+        val selected = _uiState.value.selectedParticipantIds
+        val primary = profiles.firstOrNull { it.isPrimary }
+        val ordered = mutableListOf<String>()
+        if (primary != null && selected.contains(primary.id)) {
+            ordered.add(primary.id)
+        }
+        profiles.asSequence()
+            .filter { it.id != primary?.id }
+            .map { it.id }
+            .filter { selected.contains(it) }
+            .forEach { ordered.add(it) }
+        return ordered
+    }
+
     private fun resetToParticipants() {
+        val profiles = _uiState.value.availableProfiles
+        val mode = _uiState.value.usageMode
+        val shownProfiles = if (mode == AppUsageMode.SINGLE) {
+            profiles.filter { it.isPrimary }
+        } else {
+            profiles
+        }
         _uiState.value = DecisionUiState(
-            availableProfiles = _uiState.value.availableProfiles,
+            usageMode = mode,
+            availableProfiles = shownProfiles,
             allCategories = _uiState.value.allCategories,
             isLoading = false,
-            selectedParticipantIds = _uiState.value.availableProfiles.map { it.id }.toSet()
+            selectedParticipantIds = shownProfiles.map { it.id }.toSet()
         )
     }
 }
