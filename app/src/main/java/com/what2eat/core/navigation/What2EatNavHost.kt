@@ -19,6 +19,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.what2eat.feature.decision.DecisionFlowScreen
 import com.what2eat.feature.foodpool.FoodPoolScreen
 import com.what2eat.feature.history.HistoryScreen
 import com.what2eat.feature.home.HomeScreen
@@ -29,7 +30,7 @@ import com.what2eat.feature.settings.SettingsScreen
 /**
  * What2Eat 主导航入口。
  *
- * 单 Activity + Navigation Compose，底部四 Tab + 占位页 + 偏好页路由。
+ * 单 Activity + Navigation Compose，底部四 Tab + 偏好页 + 决策流程页。
  */
 @Composable
 fun What2EatNavHost() {
@@ -89,7 +90,7 @@ fun What2EatNavHost() {
             composable(BottomNavDestination.Home.route) {
                 HomeScreen(
                     onDecideFirstClick = {
-                        navController.navigate(What2EatRoutes.PLACEHOLDER_DECIDE_FIRST)
+                        navController.navigate(What2EatRoutes.DECISION_FLOW)
                     },
                     onPoolDecideClick = {
                         navController.navigate(What2EatRoutes.PLACEHOLDER_POOL)
@@ -115,13 +116,6 @@ fun What2EatNavHost() {
 
             // ── 占位页面 ──
 
-            composable(What2EatRoutes.PLACEHOLDER_DECIDE_FIRST) {
-                PlaceholderScreen(
-                    title = "先决定吃什么",
-                    description = "此功能将在后续版本中开发"
-                )
-            }
-
             composable(What2EatRoutes.PLACEHOLDER_POOL) {
                 PlaceholderScreen(
                     title = "从我的吃饭池决定",
@@ -139,6 +133,15 @@ fun What2EatNavHost() {
             ) {
                 PreferenceScreen(
                     onBack = { navController.popBackStack() }
+                )
+            }
+
+            // ── 决策流程页面 ──
+
+            composable(What2EatRoutes.DECISION_FLOW) {
+                DecisionFlowScreen(
+                    onExit = { navController.popBackStack() },
+                    onCompleted = { navController.popBackStack() }
                 )
             }
         }

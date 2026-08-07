@@ -1,10 +1,12 @@
 package com.what2eat.data.di
 
 import com.what2eat.data.repository.AppUsageModeRepositoryImpl
+import com.what2eat.data.repository.DecisionSessionRepositoryImpl
 import com.what2eat.data.repository.FoodCategoryRepositoryImpl
 import com.what2eat.data.repository.PersonCategoryPreferenceRepositoryImpl
 import com.what2eat.data.repository.PersonProfileRepositoryImpl
 import com.what2eat.domain.repository.AppUsageModeRepository
+import com.what2eat.domain.repository.DecisionSessionRepository
 import com.what2eat.domain.repository.FoodCategoryRepository
 import com.what2eat.domain.repository.PersonCategoryPreferenceRepository
 import com.what2eat.domain.repository.PersonProfileRepository
@@ -44,4 +46,10 @@ abstract class RepositoryModule {
     abstract fun bindAppUsageModeRepository(
         impl: AppUsageModeRepositoryImpl
     ): AppUsageModeRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindDecisionSessionRepository(
+        impl: DecisionSessionRepositoryImpl
+    ): DecisionSessionRepository
 }

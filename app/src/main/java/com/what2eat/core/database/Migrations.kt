@@ -85,3 +85,59 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         db.execSQL("ALTER TABLE `person_profile_new` RENAME TO `person_profile`")
     }
 }
+
+/**
+ * MIGRATION_2_3: v2 → v3
+ * 新增 decision_session、session_participant、session_category_selection 三张表。
+ * 不修改已有表结构，不影响已有数据。
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // ── 1. 创建 decision_session 表 ──
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `decision_session` (
+                `id` TEXT NOT NULL,
+                `decisionMode` INTEGER NOT NULL DEFAULT 0,
+                `status` INTEGER NOT NULL DEFAULT 0,
+                `startedAt` INTEGER NOT NULL DEFAULT 0,
+                `completedAt` INTEGER,
+                `mealModes` TEXT NOT NULL DEFAULT '',
+                `moodTags` TEXT NOT NULL DEFAULT '',
+                `budgetLevel` INTEGER NOT NULL DEFAULT 5,
+                `distanceLevel` INTEGER NOT NULL DEFAULT 4,
+                `createdAt` INTEGER NOT NULL DEFAULT 0,
+                `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(`id`)
+            )
+            """.trimIndent()
+        )
+
+        // ── 2. 创建 session_participant 表 ──
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `session_participant` (
+                `sessionId` TEXT NOT NULL,
+                `personId` TEXT NOT NULL,
+                `selectionOrder` INTEGER NOT NULL DEFAULT 0,
+                `completed` INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(`sessionId`, `personId`)
+            )
+            """.trimIndent()
+        )
+
+        // ── 3. 创建 session_category_selection 表 ──
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `session_category_selection` (
+                `sessionId` TEXT NOT NULL,
+                `personId` TEXT NOT NULL,
+                `categoryId` TEXT NOT NULL,
+                `selectionType` INTEGER NOT NULL DEFAULT 1,
+                `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(`sessionId`, `personId`, `categoryId`)
+            )
+            """.trimIndent()
+        )
+    }
+}
