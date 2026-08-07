@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -31,13 +32,14 @@ import com.what2eat.R
 /**
  * 首页。
  *
- * 显示主要用户名称问候 + 两个主入口卡片。
- * 两个入口暂时跳转到占位页面。
+ * 显示主要用户名称问候 + 主入口卡片。
+ * 有未完成决策时显示"继续上次决定"入口。
  */
 @Composable
 fun HomeScreen(
     onDecideFirstClick: () -> Unit,
     onPoolDecideClick: () -> Unit,
+    onContinueSessionClick: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -70,6 +72,18 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // ── 继续上次决定（有活动会话时显示）──
+        if (uiState.hasActiveSession) {
+            EntryCard(
+                icon = Icons.Outlined.PlayArrow,
+                title = "继续上次决定",
+                description = "你有一个未完成的决策流程",
+                onClick = onContinueSessionClick,
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+        }
+
         // ── 主入口卡片 ──
         EntryCard(
             icon = Icons.Outlined.Category,
@@ -95,13 +109,16 @@ private fun EntryCard(
     icon: ImageVector,
     title: String,
     description: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    containerColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primaryContainer,
+    contentColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onPrimaryContainer
 ) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+            containerColor = containerColor,
+            contentColor = contentColor
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -114,19 +131,16 @@ private fun EntryCard(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                modifier = Modifier.size(32.dp),
-                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                modifier = Modifier.size(32.dp)
             )
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                fontWeight = FontWeight.SemiBold
             )
             Text(
                 text = description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                style = MaterialTheme.typography.bodyMedium
             )
         }
     }

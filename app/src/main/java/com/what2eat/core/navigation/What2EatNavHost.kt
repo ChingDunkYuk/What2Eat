@@ -94,6 +94,9 @@ fun What2EatNavHost() {
                     },
                     onPoolDecideClick = {
                         navController.navigate(What2EatRoutes.PLACEHOLDER_POOL)
+                    },
+                    onContinueSessionClick = {
+                        navController.navigate(What2EatRoutes.DECISION_FLOW)
                     }
                 )
             }

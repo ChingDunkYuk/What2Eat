@@ -1,8 +1,11 @@
 package com.what2eat.feature.decision
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,8 +21,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Handshake
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -30,22 +36,20 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.what2eat.R
 import com.what2eat.domain.model.BudgetLevel
 import com.what2eat.domain.model.DistanceLevel
 import com.what2eat.domain.model.FoodCategory
@@ -77,13 +81,54 @@ fun DecisionFlowScreen(
         DecisionStep.RESULTS -> "候选结果"
     }
 
+    // BackHandler：拦截系统返回键
+    BackHandler {
+        when (uiState.step) {
+            DecisionStep.MEAL_MODE,
+            DecisionStep.MOOD,
+            DecisionStep.BUDGET,
+            DecisionStep.DISTANCE -> {
+                viewModel.goBack()
+            }
+            DecisionStep.PARTICIPANTS -> {
+                if (uiState.hasActiveSession) {
+                    viewModel.showExitDialog()
+                } else {
+                    onExit()
+                }
+            }
+            DecisionStep.HANDOFF,
+            DecisionStep.CATEGORY_SELECT,
+            DecisionStep.RESULTS -> {
+                viewModel.showExitDialog()
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stepTitle) },
                 navigationIcon = {
-                    IconButton(onClick = onExit) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "退出")
+                    IconButton(onClick = {
+                        when (uiState.step) {
+                            DecisionStep.MEAL_MODE,
+                            DecisionStep.MOOD,
+                            DecisionStep.BUDGET,
+                            DecisionStep.DISTANCE -> viewModel.goBack()
+                            DecisionStep.PARTICIPANTS -> {
+                                if (uiState.hasActiveSession) {
+                                    viewModel.showExitDialog()
+                                } else {
+                                    onExit()
+                                }
+                            }
+                            DecisionStep.HANDOFF,
+                            DecisionStep.CATEGORY_SELECT,
+                            DecisionStep.RESULTS -> viewModel.showExitDialog()
+                        }
+                    }) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                     }
                 }
             )
@@ -96,9 +141,18 @@ fun DecisionFlowScreen(
         ) {
             when {
                 uiState.isLoading -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center)
-                    )
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator()
+                        Text(
+                            text = "正在准备你的决策流程",
+                            modifier = Modifier.padding(top = 16.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
                 uiState.isGeneratingCandidates -> {
                     Column(
@@ -114,6 +168,13 @@ fun DecisionFlowScreen(
                         )
                     }
                 }
+                uiState.hasError -> {
+                    ErrorStateView(
+                        message = uiState.errorMessage!!,
+                        onRetry = { viewModel.dismissError() },
+                        onExit = onExit
+                    )
+                }
                 else -> when (uiState.step) {
                     DecisionStep.PARTICIPANTS -> ParticipantStep(uiState, viewModel)
                     DecisionStep.MEAL_MODE -> MealModeStep(uiState, viewModel)
@@ -124,6 +185,113 @@ fun DecisionFlowScreen(
                     DecisionStep.CATEGORY_SELECT -> CategorySelectStep(uiState, viewModel)
                     DecisionStep.RESULTS -> ResultsStep(uiState, viewModel, onCompleted)
                 }
+            }
+        }
+    }
+
+    // ── Dialogs ──
+
+    if (uiState.showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.hideExitDialog() },
+            icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
+            title = { Text("退出决策流程") },
+            text = { Text("你有一个未完成的决策流程，是否继续？") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.hideExitDialog() }) {
+                    Text("继续本次决定")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.showCancelDialog() }) {
+                    Text("放弃本次决定")
+                }
+            }
+        )
+    }
+
+    if (uiState.showCancelDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.hideCancelDialog() },
+            icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
+            title = { Text("确认放弃") },
+            text = { Text("放弃后本次决策的所有数据将被删除，无法恢复。确定要放弃吗？") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.confirmCancelSession() }) {
+                    Text("确认放弃")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.hideCancelDialog() }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    if (uiState.showNewSessionDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.cancelNewSession() },
+            icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
+            title = { Text("已有未完成的决策") },
+            text = { Text("你有一个未完成的决策流程。开始新决策将放弃当前流程，确定吗？") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.confirmNewSession() }) {
+                    Text("放弃并开始新的")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.cancelNewSession() }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+}
+
+// ── Error State ──
+
+@Composable
+private fun ErrorStateView(
+    message: String,
+    onRetry: () -> Unit,
+    onExit: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.WarningAmber,
+            contentDescription = null,
+            modifier = Modifier.size(64.dp),
+            tint = MaterialTheme.colorScheme.error
+        )
+        Text(
+            text = "出错了",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 16.dp)
+        )
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(onClick = onRetry) {
+                Text("重试")
+            }
+            Button(onClick = onExit) {
+                Text("返回首页")
             }
         }
     }
@@ -152,9 +320,7 @@ private fun ParticipantStep(
         uiState.availableProfiles.forEach { profile ->
             val selected = uiState.selectedParticipantIds.contains(profile.id)
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .let { mod -> mod },
+                modifier = Modifier.fillMaxWidth(),
                 onClick = { viewModel.toggleParticipant(profile.id) },
                 colors = CardDefaults.cardColors(
                     containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
@@ -168,11 +334,20 @@ private fun ParticipantStep(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = profile.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Column {
+                        Text(
+                            text = profile.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (profile.isPrimary) {
+                            Text(
+                                text = "主用户",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                     if (selected) {
                         Icon(
                             Icons.Outlined.Check,
@@ -191,13 +366,22 @@ private fun ParticipantStep(
             modifier = Modifier.fillMaxWidth(),
             enabled = uiState.selectedParticipantIds.isNotEmpty() && !uiState.isSaving
         ) {
-            Text("开始")
+            if (uiState.isSaving) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Text("开始")
+            }
         }
     }
 }
 
 // ── Step: Meal Mode ──
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun MealModeStep(
     uiState: DecisionUiState,
@@ -208,7 +392,7 @@ private fun MealModeStep(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
             text = "选择用餐方式（可多选）",
@@ -216,14 +400,18 @@ private fun MealModeStep(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        MealMode.entries.forEach { mode ->
-            val selected = uiState.mealModes.contains(mode)
-            FilterChip(
-                selected = selected,
-                onClick = { viewModel.toggleMealMode(mode) },
-                label = { Text(mode.label) },
-                modifier = Modifier.padding(vertical = 2.dp)
-            )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            MealMode.entries.forEach { mode ->
+                val selected = uiState.mealModes.contains(mode)
+                FilterChip(
+                    selected = selected,
+                    onClick = { viewModel.toggleMealMode(mode) },
+                    label = { Text(mode.label) }
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -248,6 +436,7 @@ private fun MealModeStep(
 
 // ── Step: Mood ──
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun MoodStep(
     uiState: DecisionUiState,
@@ -266,14 +455,18 @@ private fun MoodStep(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        MoodTag.entries.forEach { tag ->
-            val selected = uiState.moodTags.contains(tag)
-            FilterChip(
-                selected = selected,
-                onClick = { viewModel.toggleMoodTag(tag) },
-                label = { Text(tag.label) },
-                modifier = Modifier.padding(vertical = 2.dp)
-            )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            MoodTag.entries.forEach { tag ->
+                val selected = uiState.moodTags.contains(tag)
+                FilterChip(
+                    selected = selected,
+                    onClick = { viewModel.toggleMoodTag(tag) },
+                    label = { Text(tag.label) }
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -422,7 +615,17 @@ private fun DistanceStep(
                 onClick = { viewModel.confirmDistanceAndSaveConditions() },
                 modifier = Modifier.weight(1f),
                 enabled = !uiState.isSaving
-            ) { Text("开始选择") }
+            ) {
+                if (uiState.isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("开始选择")
+                }
+            }
         }
     }
 }
@@ -434,7 +637,8 @@ private fun HandoffStep(
     uiState: DecisionUiState,
     viewModel: DecisionViewModel
 ) {
-    val nextPerson = uiState.availableProfiles.firstOrNull { it.id == uiState.currentSelectingPersonId }
+    val nextPerson = uiState.currentSelectingPerson
+    val previousPersonName = viewModel.getPreviousPersonName()
 
     Column(
         modifier = Modifier
@@ -450,10 +654,19 @@ private fun HandoffStep(
             tint = MaterialTheme.colorScheme.primary
         )
 
+        if (previousPersonName != null) {
+            Text(
+                text = "$previousPersonName 已完成选择",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 24.dp)
+            )
+        }
+
         Text(
             text = "请将手机交给",
             style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(top = 24.dp),
+            modifier = Modifier.padding(top = 16.dp),
             color = MaterialTheme.colorScheme.onBackground
         )
 
@@ -465,38 +678,26 @@ private fun HandoffStep(
             modifier = Modifier.padding(top = 8.dp)
         )
 
-        if (uiState.currentSelectingPersonIndex > 0) {
-            Text(
-                text = "上一位已完成选择",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 16.dp)
-            )
-        }
-
         Spacer(modifier = Modifier.height(32.dp))
 
         Button(
-            onClick = {
-                viewModel.loadCurrentPersonSelections()
-                viewModel.startHandoffSelection()
-            },
+            onClick = { viewModel.startHandoffSelection() },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("我准备好了")
+            Text("${nextPerson?.name ?: ""}开始选择")
         }
     }
 }
 
 // ── Step: Category Selection ──
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CategorySelectStep(
     uiState: DecisionUiState,
     viewModel: DecisionViewModel
 ) {
     val personName = uiState.currentSelectingPerson?.name ?: "用户"
-    val rootCategories = uiState.allCategories.filter { it.parentId == null }
 
     Column(
         modifier = Modifier.fillMaxSize()
@@ -509,13 +710,45 @@ private fun CategorySelectStep(
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
         )
 
-        Text(
-            text = "想吃 / 可以接受 / 今天不想吃",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 20.dp)
+        // 选择计数
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "想吃 ${uiState.currentWantCount}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "接受 ${uiState.currentAcceptCount}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.secondary,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "不吃 ${uiState.currentNotTodayCount}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.outline
+            )
+        }
+
+        // 搜索栏
+        OutlinedTextField(
+            value = uiState.searchQuery,
+            onValueChange = { viewModel.setSearchQuery(it) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            placeholder = { Text("搜索分类") },
+            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+            singleLine = true
         )
 
+        // 分类列表
         LazyColumn(
             modifier = Modifier.weight(1f),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
@@ -524,7 +757,7 @@ private fun CategorySelectStep(
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(rootCategories) { root ->
+            items(uiState.filteredRootCategories) { root ->
                 val children = uiState.allCategories.filter { it.parentId == root.id }
                 if (children.isNotEmpty()) {
                     CategoryGroupCard(
@@ -543,7 +776,8 @@ private fun CategorySelectStep(
             onClick = { viewModel.completeCurrentPersonSelection() },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(16.dp),
+            enabled = uiState.currentWantCount + uiState.currentAcceptCount > 0
         ) {
             Text("完成选择")
         }
@@ -652,7 +886,7 @@ private fun ResultsStep(
         )
 
         if (uiState.candidates.isEmpty()) {
-            // 无候选
+            // 无候选 - 显示原因和返回修改入口
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -660,18 +894,43 @@ private fun ResultsStep(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
+                Icon(
+                    imageVector = Icons.Outlined.WarningAmber,
+                    contentDescription = null,
+                    modifier = Modifier.size(64.dp),
+                    tint = MaterialTheme.colorScheme.outline
+                )
                 Text(
                     text = "没有符合条件的候选分类",
                     style = MaterialTheme.typography.titleLarge,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 16.dp)
                 )
                 Text(
-                    text = "尝试调整本次选择或长期偏好后再试",
+                    text = "可能的原因：\n• 双方共同想吃/接受的分类太少\n• 某些分类被标记为「今天不想吃」\n• 长期硬排除限制了可选范围\n\n尝试调整本次选择后重新生成",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 8.dp)
                 )
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(
+                    onClick = { viewModel.goBackToFirstPersonSelection() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.size(8.dp))
+                    Text("返回修改选择")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        viewModel.showExitDialog()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("放弃本次决定")
+                }
             }
         } else {
             LazyColumn(
@@ -683,6 +942,7 @@ private fun ResultsStep(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(uiState.candidates) { candidate ->
+                    val matchDesc = viewModel.getCandidateMatchDescription(candidate)
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
@@ -711,11 +971,7 @@ private fun ResultsStep(
                                 )
                             }
                             Text(
-                                text = when (candidate.rank) {
-                                    0 -> "双方都想吃"
-                                    1 -> "一方想吃一方接受"
-                                    else -> "双方都接受"
-                                },
+                                text = matchDesc,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(top = 4.dp)
@@ -724,18 +980,18 @@ private fun ResultsStep(
                     }
                 }
             }
-        }
 
-        Button(
-            onClick = {
-                viewModel.completeSession()
-                onCompleted()
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Text("完成本次决策")
+            Button(
+                onClick = {
+                    viewModel.completeSession()
+                    onCompleted()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Text("完成本次决策")
+            }
         }
     }
 }

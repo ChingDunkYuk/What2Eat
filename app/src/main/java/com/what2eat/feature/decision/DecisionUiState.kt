@@ -6,10 +6,8 @@ import com.what2eat.domain.model.DistanceLevel
 import com.what2eat.domain.model.FoodCategory
 import com.what2eat.domain.model.MealMode
 import com.what2eat.domain.model.MoodTag
-import com.what2eat.domain.model.PersonCategoryPreference
 import com.what2eat.domain.model.PersonProfile
 import com.what2eat.domain.model.SelectionType
-import com.what2eat.domain.model.SessionCategorySelection
 
 /** 决策流程步骤 */
 enum class DecisionStep {
@@ -31,6 +29,12 @@ data class DecisionUiState(
     val isSaving: Boolean = false,
     val message: String? = null,
 
+    // 错误状态
+    val errorMessage: String? = null,
+    val showExitDialog: Boolean = false,
+    val showNewSessionDialog: Boolean = false,
+    val showCancelDialog: Boolean = false,
+
     // 参与者
     val availableProfiles: List<PersonProfile> = emptyList(),
     val selectedParticipantIds: Set<String> = emptySet(),
@@ -49,6 +53,7 @@ data class DecisionUiState(
     val hardExcludedCategoryIds: Set<String> = emptySet(),
     val currentPersonSelections: Map<String, SelectionType> = emptyMap(),
     val allPersonSelections: Map<String, Map<String, SelectionType>> = emptyMap(),
+    val searchQuery: String = "",
 
     // 结果
     val candidates: List<CandidateCategory> = emptyList(),
@@ -60,4 +65,30 @@ data class DecisionUiState(
 
     /** 是否有活动会话 */
     val hasActiveSession: Boolean get() = activeSessionId != null
+
+    /** 是否有错误 */
+    val hasError: Boolean get() = errorMessage != null
+
+    /** 当前人物的选择统计 */
+    val currentWantCount: Int
+        get() = currentPersonSelections.values.count { it == SelectionType.WANT }
+
+    val currentAcceptCount: Int
+        get() = currentPersonSelections.values.count { it == SelectionType.ACCEPT }
+
+    val currentNotTodayCount: Int
+        get() = currentPersonSelections.values.count { it == SelectionType.NOT_TODAY }
+
+    /** 过滤后的分类列表（搜索） */
+    val filteredRootCategories: List<FoodCategory>
+        get() {
+            val roots = allCategories.filter { it.parentId == null }
+            if (searchQuery.isBlank()) return roots
+            val query = searchQuery.trim()
+            return roots.filter { root ->
+                val children = allCategories.filter { it.parentId == root.id }
+                root.name.contains(query, ignoreCase = true) ||
+                    children.any { it.name.contains(query, ignoreCase = true) }
+            }
+        }
 }

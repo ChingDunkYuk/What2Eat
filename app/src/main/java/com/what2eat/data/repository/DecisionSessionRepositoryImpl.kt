@@ -169,6 +169,7 @@ class DecisionSessionRepositoryImpl @Inject constructor(
             }
 
             val parentName = allCategories.firstOrNull { it.id == category.parentId }?.name
+            val selectionsByPersonMap = selectionByPerson.mapValues { it.value.selectionType }
             candidates.add(
                 CandidateCategory(
                     categoryId = categoryId,
@@ -176,7 +177,8 @@ class DecisionSessionRepositoryImpl @Inject constructor(
                     parentCategoryName = parentName,
                     wantCount = wantCount,
                     acceptCount = acceptCount,
-                    rank = rank
+                    rank = rank,
+                    selectionsByPerson = selectionsByPersonMap
                 )
             )
         }
