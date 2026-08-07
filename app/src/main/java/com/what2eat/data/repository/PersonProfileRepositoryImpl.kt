@@ -11,8 +11,7 @@ import javax.inject.Singleton
 
 /**
  * PersonProfileRepository 的数据层实现。
- *
- * 负责在 Room Entity 和 Domain Model 之间转换。
+ * Stage 1.1: id 改为 String。
  */
 @Singleton
 class PersonProfileRepositoryImpl @Inject constructor(
@@ -31,18 +30,18 @@ class PersonProfileRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun getById(id: Long): PersonProfile? {
+    override fun observeEnabled(): Flow<List<PersonProfile>> {
+        return dao.observeEnabled().map { list ->
+            list.map { it.toDomain() }
+        }
+    }
+
+    override suspend fun getById(id: String): PersonProfile? {
         return dao.getById(id)?.toDomain()
     }
 
-    override suspend fun upsert(profile: PersonProfile): Long {
-        val entity = profile.toEntity()
-        return if (profile.id == 0L) {
-            dao.insert(entity)
-        } else {
-            dao.update(entity)
-            profile.id
-        }
+    override suspend fun upsert(profile: PersonProfile) {
+        dao.upsert(profile.toEntity())
     }
 
     override suspend fun delete(profile: PersonProfile) {
@@ -55,8 +54,9 @@ class PersonProfileRepositoryImpl @Inject constructor(
         return PersonProfile(
             id = id,
             name = name,
-            avatar = avatar,
             isPrimary = isPrimary,
+            sortOrder = sortOrder,
+            enabled = enabled,
             createdAt = createdAt,
             updatedAt = updatedAt
         )
@@ -66,8 +66,9 @@ class PersonProfileRepositoryImpl @Inject constructor(
         return PersonProfileEntity(
             id = id,
             name = name,
-            avatar = avatar,
             isPrimary = isPrimary,
+            sortOrder = sortOrder,
+            enabled = enabled,
             createdAt = createdAt,
             updatedAt = System.currentTimeMillis()
         )

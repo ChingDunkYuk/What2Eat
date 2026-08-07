@@ -1,6 +1,12 @@
 package com.what2eat.data.di
 
+import com.what2eat.data.repository.AppUsageModeRepositoryImpl
+import com.what2eat.data.repository.FoodCategoryRepositoryImpl
+import com.what2eat.data.repository.PersonCategoryPreferenceRepositoryImpl
 import com.what2eat.data.repository.PersonProfileRepositoryImpl
+import com.what2eat.domain.repository.AppUsageModeRepository
+import com.what2eat.domain.repository.FoodCategoryRepository
+import com.what2eat.domain.repository.PersonCategoryPreferenceRepository
 import com.what2eat.domain.repository.PersonProfileRepository
 import dagger.Binds
 import dagger.Module
@@ -20,4 +26,22 @@ abstract class RepositoryModule {
     abstract fun bindPersonProfileRepository(
         impl: PersonProfileRepositoryImpl
     ): PersonProfileRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindFoodCategoryRepository(
+        impl: FoodCategoryRepositoryImpl
+    ): FoodCategoryRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindPersonCategoryPreferenceRepository(
+        impl: PersonCategoryPreferenceRepositoryImpl
+    ): PersonCategoryPreferenceRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindAppUsageModeRepository(
+        impl: AppUsageModeRepositoryImpl
+    ): AppUsageModeRepository
 }

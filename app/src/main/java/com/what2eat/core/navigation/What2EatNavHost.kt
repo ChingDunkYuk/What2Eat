@@ -13,20 +13,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.what2eat.feature.foodpool.FoodPoolScreen
 import com.what2eat.feature.history.HistoryScreen
 import com.what2eat.feature.home.HomeScreen
 import com.what2eat.feature.placeholder.PlaceholderScreen
+import com.what2eat.feature.preference.PreferenceScreen
 import com.what2eat.feature.settings.SettingsScreen
 
 /**
  * What2Eat 主导航入口。
  *
- * 单 Activity + Navigation Compose，底部四 Tab + 占位页路由。
+ * 单 Activity + Navigation Compose，底部四 Tab + 占位页 + 偏好页路由。
  */
 @Composable
 fun What2EatNavHost() {
@@ -103,7 +106,11 @@ fun What2EatNavHost() {
             }
 
             composable(BottomNavDestination.Settings.route) {
-                SettingsScreen()
+                SettingsScreen(
+                    onNavigateToPreference = { personId ->
+                        navController.navigate(What2EatRoutes.preferenceRoute(personId))
+                    }
+                )
             }
 
             // ── 占位页面 ──
@@ -119,6 +126,19 @@ fun What2EatNavHost() {
                 PlaceholderScreen(
                     title = "从我的吃饭池决定",
                     description = "此功能将在后续版本中开发"
+                )
+            }
+
+            // ── 偏好设置页面 ──
+
+            composable(
+                route = What2EatRoutes.PREFERENCE,
+                arguments = listOf(
+                    navArgument("personId") { type = NavType.StringType }
+                )
+            ) {
+                PreferenceScreen(
+                    onBack = { navController.popBackStack() }
                 )
             }
         }

@@ -2,7 +2,10 @@ package com.what2eat.core.database.di
 
 import android.content.Context
 import androidx.room.Room
+import com.what2eat.core.database.MIGRATION_1_2
 import com.what2eat.core.database.What2EatDatabase
+import com.what2eat.core.database.dao.FoodCategoryDao
+import com.what2eat.core.database.dao.PersonCategoryPreferenceDao
 import com.what2eat.core.database.dao.PersonProfileDao
 import dagger.Module
 import dagger.Provides
@@ -27,7 +30,9 @@ object DatabaseModule {
             context,
             What2EatDatabase::class.java,
             What2EatDatabase.DATABASE_NAME
-        ).build()
+        )
+            .addMigrations(MIGRATION_1_2)
+            .build()
     }
 
     @Provides
@@ -35,5 +40,19 @@ object DatabaseModule {
         database: What2EatDatabase
     ): PersonProfileDao {
         return database.personProfileDao()
+    }
+
+    @Provides
+    fun provideFoodCategoryDao(
+        database: What2EatDatabase
+    ): FoodCategoryDao {
+        return database.foodCategoryDao()
+    }
+
+    @Provides
+    fun providePersonCategoryPreferenceDao(
+        database: What2EatDatabase
+    ): PersonCategoryPreferenceDao {
+        return database.personCategoryPreferenceDao()
     }
 }

@@ -30,11 +30,39 @@
 
     <!-- Settings -->
     <string name="settings_title">设置</string>
-    <string name="settings_user_name">主要用户名称</string>
-    <string name="settings_user_name_hint">输入你的名字</string>
+    <string name="settings_about">关于</string>
+    <string name="settings_about_desc">What2Eat - 帮助情侣共同决定今晚吃什么</string>
+    <string name="settings_version">版本 %1$s</string>
+
+    <!-- Settings: Usage Mode -->
+    <string name="settings_usage_mode">使用模式</string>
+    <string name="settings_mode_single">一个人使用</string>
+    <string name="settings_mode_couple">两个人一起使用</string>
+
+    <!-- Settings: Profiles -->
+    <string name="settings_profiles">人物档案</string>
+    <string name="settings_profile_primary">我</string>
+    <string name="settings_profile_secondary">另一半</string>
+    <string name="settings_user_name">名称</string>
+    <string name="settings_user_name_hint">输入名字</string>
     <string name="settings_save">保存</string>
     <string name="settings_saved">已保存</string>
-    <string name="settings_about">关于</string>
-    <string name="settings_version">版本 %1$s</string>
-    <string name="settings_about_desc">What2Eat - 帮助情侣共同决定今晚吃什么</string>
+    <string name="settings_set_preference">设置饮食偏好</string>
+
+    <!-- Preference Screen -->
+    <string name="preference_search_hint">搜索分类</string>
+    <string name="preference_filter_all">全部</string>
+    <string name="preference_filter_set">只看已设置</string>
+    <string name="preference_filter_excluded">只看长期不吃</string>
+    <string name="preference_loading">加载中…</string>
+    <string name="preference_no_results">没有匹配的分类</string>
+    <string name="preference_hard_exclude">长期不吃</string>
+    <string name="preference_hard_excluded_hint">已设为长期不吃，不会出现在推荐中</string>
+
+    <!-- Preference Levels -->
+    <string name="pref_level_dislike2">非常不喜欢</string>
+    <string name="pref_level_dislike1">不太喜欢</string>
+    <string name="pref_level_neutral">无所谓</string>
+    <string name="pref_level_like1">喜欢</string>
+    <string name="pref_level_like2">非常喜欢</string>
 </resources>

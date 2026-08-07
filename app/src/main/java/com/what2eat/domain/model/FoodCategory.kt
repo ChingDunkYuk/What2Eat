@@ -1,17 +1,16 @@
 package com.what2eat.domain.model
 
 /**
- * 人物档案领域模型。
- *
- * Stage 1.1 更新：id 改为 String，新增 sortOrder 和 enabled。
- * 最多启用两个人物，主用户 isPrimary = true。
+ * 餐饮分类领域模型。
+ * 支持一级和二级分类，parentId 为 null 表示一级分类。
  */
-data class PersonProfile(
+data class FoodCategory(
     val id: String,
     val name: String,
-    val isPrimary: Boolean = false,
+    val parentId: String? = null,
     val sortOrder: Int = 0,
     val enabled: Boolean = true,
+    val isSystemPreset: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
