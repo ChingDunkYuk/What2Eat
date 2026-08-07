@@ -29,7 +29,9 @@ data class FoodOptionDetailState(
     val tags: List<String> = emptyList(),
     val preferences: List<OptionPreferenceUi> = emptyList(),
     val message: String? = null,
-    val deleted: Boolean = false
+    val deleted: Boolean = false,
+    /** 是否已成功加载过数据（用于区分首次加载与删除后 option 为空） */
+    val loaded: Boolean = false
 )
 
 @HiltViewModel
@@ -69,7 +71,14 @@ class FoodOptionDetailViewModel @Inject constructor(
                     tags = tags,
                     preferences = prefUi
                 )
-            }.collect { state -> _uiState.value = state }
+            }.collect { state ->
+                // 保留瞬时状态（message/deleted），并标记已加载
+                _uiState.value = state.copy(
+                    loaded = true,
+                    message = _uiState.value.message,
+                    deleted = _uiState.value.deleted
+                )
+            }
         }
     }
 
@@ -133,7 +142,10 @@ class FoodOptionDetailViewModel @Inject constructor(
                 )
             } else {
                 optionRepository.delete(id)
-                _uiState.value = _uiState.value.copy(deleted = true)
+                _uiState.value = _uiState.value.copy(
+                    deleted = true,
+                    message = "已删除"
+                )
             }
         }
     }

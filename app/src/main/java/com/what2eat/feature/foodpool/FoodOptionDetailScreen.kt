@@ -72,6 +72,10 @@ fun FoodOptionDetailScreen(
         state.message?.let { snackbar.showSnackbar(it); viewModel.consumeMessage() }
     }
     LaunchedEffect(state.deleted) { if (state.deleted) onBack() }
+    // 已加载但数据为空（例如已被删除）→ 直接返回列表，不闪整页加载
+    LaunchedEffect(state.loaded, state.option) {
+        if (state.loaded && state.option == null) onBack()
+    }
 
     Scaffold(
         topBar = {
@@ -88,7 +92,9 @@ fun FoodOptionDetailScreen(
     ) { innerPadding ->
         val option = state.option
         if (option == null) {
-            Text("加载中…", modifier = Modifier.padding(innerPadding).padding(24.dp))
+            if (!state.loaded) {
+                Text("加载中…", modifier = Modifier.padding(innerPadding).padding(24.dp))
+            }
             return@Scaffold
         }
 
