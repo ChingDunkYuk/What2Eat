@@ -2,6 +2,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Stage 3.2：平台快捷承接所需的包可见性
+         Android 11+ 需显式声明才能通过 PackageManager 查询大众点评/美团是否已安装。
+         仅声明确有必要的平台包，不申请任何运行时权限。 -->
+    <queries>
+        <!-- 大众点评 -->
+        <package android:name="com.dianping.v1" />
+        <!-- 美团 -->
+        <package android:name="com.sankuai.meituan" />
+    </queries>
+
     <application
         android:name=".What2EatApplication"
         android:allowBackup="true"

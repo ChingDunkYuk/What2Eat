@@ -1,16 +1,21 @@
 package com.what2eat.data.repository
 
+import androidx.room.withTransaction
+import com.what2eat.core.database.What2EatDatabase
+import com.what2eat.core.database.dao.DecisionRecommendationDao
 import com.what2eat.core.database.dao.DecisionSessionDao
 import com.what2eat.core.database.dao.FoodCategoryDao
 import com.what2eat.core.database.dao.PersonCategoryPreferenceDao
 import com.what2eat.core.database.dao.SessionCategorySelectionDao
 import com.what2eat.core.database.dao.SessionParticipantDao
+import com.what2eat.core.database.entity.DecisionRecommendationEntity
 import com.what2eat.core.database.entity.DecisionSessionEntity
 import com.what2eat.core.database.entity.SessionCategorySelectionEntity
 import com.what2eat.core.database.entity.SessionParticipantEntity
 import com.what2eat.domain.model.BudgetLevel
 import com.what2eat.domain.model.CandidateCategory
 import com.what2eat.domain.model.DecisionMode
+import com.what2eat.domain.model.DecisionRecommendation
 import com.what2eat.domain.model.DecisionSession
 import com.what2eat.domain.model.DistanceLevel
 import com.what2eat.domain.model.MealMode
@@ -30,9 +35,11 @@ import javax.inject.Singleton
 
 @Singleton
 class DecisionSessionRepositoryImpl @Inject constructor(
+    private val database: What2EatDatabase,
     private val sessionDao: DecisionSessionDao,
     private val participantDao: SessionParticipantDao,
     private val selectionDao: SessionCategorySelectionDao,
+    private val recommendationDao: DecisionRecommendationDao,
     private val foodCategoryRepository: FoodCategoryRepository,
     private val preferenceRepository: PersonCategoryPreferenceRepository
 ) : DecisionSessionRepository {
@@ -187,6 +194,72 @@ class DecisionSessionRepositoryImpl @Inject constructor(
         return candidates.sortedBy { it.rank }
     }
 
+    // ── Recommendation & History ──
+
+    /**
+     * 统一完成用例（单人与双人共用唯一入口）。
+     * 在单个数据库事务内完成：更新 DecisionSession=COMPLETED/selectedCategoryId/completedAt
+     * + 标记对应推荐为选中。保证不会出现 "Session 已 COMPLETED 但推荐标记未写入" 的半完成状态。
+     */
+    override suspend fun completeWithRecommendation(
+        id: String,
+        categoryId: String,
+        rerollCount: Int,
+        finalWeight: Double
+    ) {
+        database.withTransaction {
+            val now = System.currentTimeMillis()
+            sessionDao.completeWithRecommendation(
+                id = id,
+                categoryId = categoryId,
+                rerollCount = rerollCount,
+                finalWeight = finalWeight,
+                completedAt = now,
+                updatedAt = now
+            )
+            recommendationDao.markSelected(id, categoryId)
+        }
+    }
+
+    override suspend fun completeSessionWithRecommendation(
+        id: String,
+        categoryId: String,
+        rerollCount: Int,
+        finalWeight: Double
+    ) {
+        val now = System.currentTimeMillis()
+        sessionDao.completeWithRecommendation(
+            id = id,
+            categoryId = categoryId,
+            rerollCount = rerollCount,
+            finalWeight = finalWeight,
+            completedAt = now,
+            updatedAt = now
+        )
+    }
+
+    override suspend fun getCompletedHistory(): List<Pair<String, Long>> {
+        return sessionDao.getCompletedWithSelection()
+            .filter { it.selectedCategoryId != null && it.completedAt != null }
+            .map { it.selectedCategoryId!! to it.completedAt!! }
+    }
+
+    override suspend fun saveRecommendation(recommendation: DecisionRecommendation) {
+        recommendationDao.insert(recommendation.toEntity())
+    }
+
+    override suspend fun markRecommendationSelected(sessionId: String, categoryId: String) {
+        recommendationDao.markSelected(sessionId, categoryId)
+    }
+
+    override suspend fun markRecommendationRejected(sessionId: String, categoryId: String) {
+        recommendationDao.markRejected(sessionId, categoryId)
+    }
+
+    override suspend fun getRecommendations(sessionId: String): List<DecisionRecommendation> {
+        return recommendationDao.getBySession(sessionId).map { it.toDomain() }
+    }
+
     // ── Mappers ──
 
     private fun DecisionSessionEntity.toDomain(): DecisionSession {
@@ -200,6 +273,9 @@ class DecisionSessionRepositoryImpl @Inject constructor(
             moodTags = parseMoodTags(moodTags),
             budgetLevel = BudgetLevel.entries.getOrElse(budgetLevel) { BudgetLevel.UNLIMITED },
             distanceLevel = DistanceLevel.entries.getOrElse(distanceLevel) { DistanceLevel.UNLIMITED },
+            selectedCategoryId = selectedCategoryId,
+            rerollCount = rerollCount,
+            finalWeight = finalWeight,
             createdAt = createdAt,
             updatedAt = updatedAt
         )
@@ -216,8 +292,38 @@ class DecisionSessionRepositoryImpl @Inject constructor(
             moodTags = moodTags.joinToString(",") { it.ordinal.toString() },
             budgetLevel = budgetLevel.ordinal,
             distanceLevel = distanceLevel.ordinal,
+            selectedCategoryId = selectedCategoryId,
+            rerollCount = rerollCount,
+            finalWeight = finalWeight,
             createdAt = createdAt,
             updatedAt = System.currentTimeMillis()
+        )
+    }
+
+    private fun DecisionRecommendationEntity.toDomain(): DecisionRecommendation {
+        return DecisionRecommendation(
+            id = id,
+            sessionId = sessionId,
+            categoryId = categoryId,
+            rank = rank,
+            weight = weight,
+            selected = selected,
+            rejected = rejected,
+            reasonKeys = if (reasonKeys.isBlank()) emptyList() else reasonKeys.split(","),
+            createdAt = createdAt
+        )
+    }
+
+    private fun DecisionRecommendation.toEntity(): DecisionRecommendationEntity {
+        return DecisionRecommendationEntity(
+            sessionId = sessionId,
+            categoryId = categoryId,
+            rank = rank,
+            weight = weight,
+            selected = selected,
+            rejected = rejected,
+            reasonKeys = reasonKeys.joinToString(","),
+            createdAt = createdAt
         )
     }
 

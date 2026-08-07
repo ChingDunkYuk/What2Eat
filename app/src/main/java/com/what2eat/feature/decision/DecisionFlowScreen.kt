@@ -27,7 +27,10 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Handshake
+import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.WarningAmber
@@ -41,14 +44,20 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -65,6 +74,7 @@ import com.what2eat.domain.model.FoodCategory
 import com.what2eat.domain.model.MealMode
 import com.what2eat.domain.model.MoodTag
 import com.what2eat.domain.model.SelectionType
+import com.what2eat.feature.common.PlatformSearchSheet
 
 /**
  * 决策流程主页面。
@@ -83,12 +93,22 @@ fun DecisionFlowScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val keyboardController = LocalSoftwareKeyboardController.current
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // 展示搜索操作结果 Snackbar（地图/浏览器/复制反馈）
+    LaunchedEffect(uiState.searchMessage) {
+        val msg = uiState.searchMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(msg)
+        viewModel.consumeSearchMessage()
+    }
 
     val stepTitle = when (uiState.step) {
         DecisionStep.CONDITIONS -> "本次条件"
         DecisionStep.HANDOFF -> "交接"
         DecisionStep.CATEGORY_SELECT -> "本次选择"
         DecisionStep.RESULTS -> "候选结果"
+        DecisionStep.RECOMMENDATION -> "最终推荐"
+        DecisionStep.COMPLETED -> "完成"
     }
 
     // BackHandler：拦截系统返回键
@@ -97,11 +117,14 @@ fun DecisionFlowScreen(
             DecisionStep.CONDITIONS -> viewModel.handleBack(onExit)
             DecisionStep.HANDOFF,
             DecisionStep.CATEGORY_SELECT,
-            DecisionStep.RESULTS -> viewModel.showExitDialog()
+            DecisionStep.RESULTS,
+            DecisionStep.RECOMMENDATION -> viewModel.showExitDialog()
+            DecisionStep.COMPLETED -> onExit()
         }
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(stepTitle) },
@@ -111,7 +134,9 @@ fun DecisionFlowScreen(
                             DecisionStep.CONDITIONS -> viewModel.handleBack(onExit)
                             DecisionStep.HANDOFF,
                             DecisionStep.CATEGORY_SELECT,
-                            DecisionStep.RESULTS -> viewModel.showExitDialog()
+                            DecisionStep.RESULTS,
+                            DecisionStep.RECOMMENDATION -> viewModel.showExitDialog()
+                            DecisionStep.COMPLETED -> onExit()
                         }
                     }) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
@@ -170,6 +195,8 @@ fun DecisionFlowScreen(
                         keyboardController = keyboardController
                     )
                     DecisionStep.RESULTS -> ResultsStep(uiState, viewModel, onCompleted, keyboardController)
+                    DecisionStep.RECOMMENDATION -> RecommendationStep(uiState, viewModel)
+                    DecisionStep.COMPLETED -> CompletedStep(uiState, viewModel, onExit, onCompleted)
                 }
             }
         }
@@ -268,6 +295,16 @@ fun DecisionFlowScreen(
                     Text("继续现有决定")
                 }
             }
+        )
+    }
+
+    // ── Stage 3.2 平台承接底部面板（关闭不影响已完成决策）──
+    if (uiState.showSearchPanel) {
+        PlatformSearchSheet(
+            query = viewModel.completedSearchQuery(),
+            onDismiss = viewModel::hideSearchPanel,
+            onPlatformSearch = viewModel::onPlatformSearch,
+            onCopySearch = viewModel::onCopySearch
         )
     }
 }
@@ -956,8 +993,22 @@ private fun ResultsStep(
                 }
             }
 
-            // 保存候选（会话保持 READY），返回首页后显示"继续本次决定"
+            // 生成最终推荐（Stage 2.2）
             Button(
+                onClick = { viewModel.generateRecommendation() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .imePadding()
+                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 0.dp)
+            ) {
+                Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.size(8.dp))
+                Text("生成最终推荐")
+            }
+
+            // 保存候选（会话保持 READY），返回首页后显示"继续本次决定"
+            OutlinedButton(
                 onClick = {
                     keyboardController?.hide()
                     onCompleted()
@@ -973,3 +1024,259 @@ private fun ResultsStep(
         }
     }
 }
+
+/**
+ * 最终推荐页（Stage 2.2）。
+ * 展示推荐分类、推荐原因、匹配度，支持换一个/就吃这个/看看其他候选。
+ */
+@Composable
+private fun RecommendationStep(
+    uiState: DecisionUiState,
+    viewModel: DecisionViewModel
+) {
+    if (uiState.isComputingRecommendation) {
+        // 正在计算推荐（含换一个）
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            CircularProgressIndicator()
+            Text(
+                text = "正在为你挑选...",
+                modifier = Modifier.padding(top = 16.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        return
+    }
+
+    // 原本就无候选 / 全部换完
+    if (uiState.recommendationExhausted || uiState.recommendation == null) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.WarningAmber,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.outline
+            )
+            Text(
+                text = if (uiState.candidates.isEmpty()) {
+                    "今天没有符合所有条件的选择"
+                } else {
+                    "候选已经看完了"
+                },
+                style = MaterialTheme.typography.titleLarge,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            if (uiState.candidates.isNotEmpty()) {
+                Button(
+                    onClick = { viewModel.resetRejectedAndRecompute() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("重新看看这些选项")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+            OutlinedButton(
+                onClick = { viewModel.returnToConditionsFromRecommendation() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("返回修改条件")
+            }
+        }
+        return
+    }
+
+    val recommendation = uiState.recommendation!!
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "今晚吃：",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        recommendation.parentCategoryName?.let { parent ->
+            Text(
+                text = parent,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            text = recommendation.categoryName,
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(vertical = 4.dp)
+        )
+
+        // 匹配度
+        Text(
+            text = "匹配度：${viewModel.matchLevelLabel(recommendation)}",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // 推荐原因
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "为什么推荐它",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                recommendation.reasonTypes.forEach { type ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Outlined.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.size(8.dp))
+                        Text(
+                            text = viewModel.reasonText(type),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // 操作按钮
+        Button(
+            onClick = { viewModel.confirmRecommendation() },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("就吃这个")
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (uiState.isLastRecommendation) {
+            Text(
+                text = "只剩这个选择了",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            OutlinedButton(
+                onClick = { viewModel.rerollRecommendation() },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !uiState.isComputingRecommendation
+            ) {
+                Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.size(8.dp))
+                Text("换一个")
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        TextButton(onClick = { viewModel.goBackToCandidates() }) {
+            Text("看看其他候选")
+        }
+    }
+}
+
+/**
+ * 决定完成页（Stage 2.2）。
+ */
+@Composable
+private fun CompletedStep(
+    uiState: DecisionUiState,
+    viewModel: DecisionViewModel,
+    onExit: () -> Unit,
+    onCompleted: () -> Unit
+) {
+    val completed = uiState.completedCategory
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Check,
+            contentDescription = null,
+            modifier = Modifier.size(48.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = "决定好了！",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 16.dp)
+        )
+        if (completed != null) {
+            completed.parentCategoryName?.let { parent ->
+                Text(
+                    text = parent,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 16.dp)
+                )
+            }
+            Text(
+                text = "今晚吃：",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            Text(
+                text = completed.categoryName,
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(32.dp))
+        Button(
+            onClick = viewModel::showSearchPanel,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("去找餐厅")
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = onExit,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("返回首页")
+        }
+    }
+}
+
+// ── Stage 3.2 平台承接 —— 复用 feature.common.PlatformSearchSheet ──

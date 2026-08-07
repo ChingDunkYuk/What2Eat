@@ -5,13 +5,20 @@ import com.what2eat.data.repository.DecisionSessionRepositoryImpl
 import com.what2eat.data.repository.FoodCategoryRepositoryImpl
 import com.what2eat.data.repository.PersonCategoryPreferenceRepositoryImpl
 import com.what2eat.data.repository.PersonProfileRepositoryImpl
+import com.what2eat.data.search.AndroidPlatformSearchLauncher
+import com.what2eat.data.search.AndroidSearchLauncher
+import com.what2eat.domain.engine.DecisionEngine
+import com.what2eat.domain.engine.DefaultDecisionEngine
 import com.what2eat.domain.repository.AppUsageModeRepository
 import com.what2eat.domain.repository.DecisionSessionRepository
 import com.what2eat.domain.repository.FoodCategoryRepository
 import com.what2eat.domain.repository.PersonCategoryPreferenceRepository
 import com.what2eat.domain.repository.PersonProfileRepository
+import com.what2eat.domain.search.PlatformSearchLauncher
+import com.what2eat.domain.search.SearchLauncher
 import dagger.Binds
 import dagger.Module
+import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
@@ -52,4 +59,22 @@ abstract class RepositoryModule {
     abstract fun bindDecisionSessionRepository(
         impl: DecisionSessionRepositoryImpl
     ): DecisionSessionRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSearchLauncher(
+        impl: AndroidSearchLauncher
+    ): SearchLauncher
+
+    @Binds
+    @Singleton
+    abstract fun bindPlatformSearchLauncher(
+        impl: AndroidPlatformSearchLauncher
+    ): PlatformSearchLauncher
+
+    companion object {
+        @Provides
+        @Singleton
+        fun provideDecisionEngine(): DecisionEngine = DefaultDecisionEngine()
+    }
 }

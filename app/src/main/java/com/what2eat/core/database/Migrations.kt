@@ -141,3 +141,36 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         )
     }
 }
+
+/**
+ * MIGRATION_3_4: v3 → v4
+ * 1. decision_session 新增 selectedCategoryId / rerollCount / finalWeight 列
+ * 2. 新增 decision_recommendation 表（推荐快照）
+ * 非 destructive：不清空任何人物/偏好/会话数据。
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // ── 1. decision_session 增加列 ──
+        db.execSQL("ALTER TABLE `decision_session` ADD COLUMN `selectedCategoryId` TEXT")
+        db.execSQL("ALTER TABLE `decision_session` ADD COLUMN `rerollCount` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `decision_session` ADD COLUMN `finalWeight` REAL NOT NULL DEFAULT 0")
+
+        // ── 2. 创建 decision_recommendation 表 ──
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `decision_recommendation` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `sessionId` TEXT NOT NULL,
+                `categoryId` TEXT NOT NULL,
+                `rank` INTEGER NOT NULL DEFAULT 0,
+                `weight` REAL NOT NULL DEFAULT 0,
+                `selected` INTEGER NOT NULL DEFAULT 0,
+                `rejected` INTEGER NOT NULL DEFAULT 0,
+                `reasonKeys` TEXT NOT NULL DEFAULT '',
+                `createdAt` INTEGER NOT NULL DEFAULT 0
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_decision_recommendation_sessionId` ON `decision_recommendation` (`sessionId`)")
+    }
+}

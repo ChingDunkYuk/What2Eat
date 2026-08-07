@@ -1,5 +1,8 @@
 package com.what2eat.feature.decision
 
+import com.what2eat.domain.engine.MatchLevel
+import com.what2eat.domain.engine.ReasonType
+import com.what2eat.domain.engine.RecommendationItem
 import com.what2eat.domain.model.AppUsageMode
 import com.what2eat.domain.model.BudgetLevel
 import com.what2eat.domain.model.CandidateCategory
@@ -11,18 +14,33 @@ import com.what2eat.domain.model.PersonCategoryPreference
 import com.what2eat.domain.model.PersonProfile
 import com.what2eat.domain.model.SelectionType
 
-/** 决策流程步骤（Stage 2.1 精简流程） */
+/** 决策流程步骤（Stage 2.1 精简流程 + Stage 2.2 最终推荐） */
 enum class DecisionStep {
     CONDITIONS,      // 本次条件（参与人物+用餐方式+状态+预算+距离，合并为单页）
     HANDOFF,         // 双人交接（请将手机交给...）
     CATEGORY_SELECT, // 每人本次选择
-    RESULTS          // 候选结果
+    RESULTS,         // 候选结果
+    RECOMMENDATION,  // 最终推荐（Stage 2.2）
+    COMPLETED        // 决定完成页（Stage 2.2）
 }
 
 /** 一个分类分组：一级分类 + 其子分类（可能被搜索过滤） */
 data class CategoryGroup(
     val root: FoodCategory,
     val children: List<FoodCategory>
+)
+
+/** 最终推荐的展示数据（含推荐原因与匹配度） */
+data class RecommendationView(
+    val categoryId: String,
+    val categoryName: String,
+    val parentCategoryName: String? = null,
+    /** 匹配度标签 */
+    val matchLevel: MatchLevel,
+    /** 推荐原因 type 列表 */
+    val reasonTypes: List<ReasonType>,
+    /** 调试用权重，普通 UI 不直接展示 */
+    val weight: Double
 )
 
 /** 决策流程 UI 状态 */
@@ -76,7 +94,31 @@ data class DecisionUiState(
 
     // 结果
     val candidates: List<CandidateCategory> = emptyList(),
-    val isGeneratingCandidates: Boolean = false
+    val isGeneratingCandidates: Boolean = false,
+
+    // ── Stage 2.2 最终推荐 ──
+    /** 当前推荐 */
+    val recommendation: RecommendationView? = null,
+    /** 所有通过硬过滤且未被拒绝的候选（含权重），用于"看看其他候选" */
+    val survivingCandidates: List<RecommendationItem> = emptyList(),
+    /** 本轮已拒绝（换一个）的候选 id */
+    val rejectedIds: Set<String> = emptySet(),
+    /** 换一个次数 */
+    val rerollCount: Int = 0,
+    /** 是否正在计算推荐 */
+    val isComputingRecommendation: Boolean = false,
+    /** 是否候选耗尽（原本无候选或全部换完） */
+    val recommendationExhausted: Boolean = false,
+    /** 是否只剩一个候选（仅显示"只剩这个选择了"） */
+    val isLastRecommendation: Boolean = false,
+    /** 完成页展示的分量 */
+    val completedCategory: RecommendationView? = null,
+
+    // ── Stage 3.1 通用搜索承接 ──
+    /** 完成页是否显示"去找餐厅"底部搜索面板 */
+    val showSearchPanel: Boolean = false,
+    /** 搜索操作的 Snackbar 提示（地图/浏览器/复制结果反馈） */
+    val searchMessage: String? = null
 ) {
     /** 当前选择中的人物 */
     val currentSelectingPerson: PersonProfile?

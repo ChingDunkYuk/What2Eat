@@ -1,6 +1,7 @@
 package com.what2eat.domain.repository
 
 import com.what2eat.domain.model.CandidateCategory
+import com.what2eat.domain.model.DecisionRecommendation
 import com.what2eat.domain.model.DecisionSession
 import com.what2eat.domain.model.SessionCategorySelection
 import com.what2eat.domain.model.SessionParticipant
@@ -69,4 +70,41 @@ interface DecisionSessionRepository {
 
     /** 生成候选分类列表 */
     suspend fun generateCandidates(sessionId: String): List<CandidateCategory>
+
+    // ── Recommendation & History ──
+
+    /**
+     * 统一完成用例方法（单人与双人共用）：
+     * 在单个数据库事务内完成 "更新 DecisionSession=COMPLETED/selectedCategoryId/completedAt" +
+     * "标记对应推荐为选中"，避免出现 Session 已 COMPLETED 但推荐未写入的半完成状态。
+     */
+    suspend fun completeWithRecommendation(
+        id: String,
+        categoryId: String,
+        rerollCount: Int,
+        finalWeight: Double
+    )
+
+    /** 完成会话并保存最终推荐（状态 → COMPLETED） */
+    suspend fun completeSessionWithRecommendation(
+        id: String,
+        categoryId: String,
+        rerollCount: Int,
+        finalWeight: Double
+    )
+
+    /** 查询已完成且带最终选择的会话（用于历史防重复），返回 (categoryId, completedAt) */
+    suspend fun getCompletedHistory(): List<Pair<String, Long>>
+
+    /** 保存一条推荐快照 */
+    suspend fun saveRecommendation(recommendation: DecisionRecommendation)
+
+    /** 标记某推荐为选中 */
+    suspend fun markRecommendationSelected(sessionId: String, categoryId: String)
+
+    /** 标记某推荐为已拒绝（换一个） */
+    suspend fun markRecommendationRejected(sessionId: String, categoryId: String)
+
+    /** 获取会话的全部推荐快照 */
+    suspend fun getRecommendations(sessionId: String): List<DecisionRecommendation>
 }

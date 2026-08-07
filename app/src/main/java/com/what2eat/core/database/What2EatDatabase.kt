@@ -2,12 +2,14 @@ package com.what2eat.core.database
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import com.what2eat.core.database.dao.DecisionRecommendationDao
 import com.what2eat.core.database.dao.DecisionSessionDao
 import com.what2eat.core.database.dao.FoodCategoryDao
 import com.what2eat.core.database.dao.PersonCategoryPreferenceDao
 import com.what2eat.core.database.dao.PersonProfileDao
 import com.what2eat.core.database.dao.SessionCategorySelectionDao
 import com.what2eat.core.database.dao.SessionParticipantDao
+import com.what2eat.core.database.entity.DecisionRecommendationEntity
 import com.what2eat.core.database.entity.DecisionSessionEntity
 import com.what2eat.core.database.entity.FoodCategoryEntity
 import com.what2eat.core.database.entity.PersonCategoryPreferenceEntity
@@ -19,6 +21,8 @@ import com.what2eat.core.database.entity.SessionParticipantEntity
  * What2Eat Room 数据库。
  *
  * Stage 2.1: 版本升级到 3，新增 decision_session、session_participant、session_category_selection 表。
+ * Stage 2.2: 版本升级到 4，decision_session 新增 selectedCategoryId/rerollCount/finalWeight，
+ *            新增 decision_recommendation 表。
  */
 @Database(
     entities = [
@@ -27,9 +31,10 @@ import com.what2eat.core.database.entity.SessionParticipantEntity
         PersonCategoryPreferenceEntity::class,
         DecisionSessionEntity::class,
         SessionParticipantEntity::class,
-        SessionCategorySelectionEntity::class
+        SessionCategorySelectionEntity::class,
+        DecisionRecommendationEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 abstract class What2EatDatabase : RoomDatabase() {
@@ -40,6 +45,7 @@ abstract class What2EatDatabase : RoomDatabase() {
     abstract fun decisionSessionDao(): DecisionSessionDao
     abstract fun sessionParticipantDao(): SessionParticipantDao
     abstract fun sessionCategorySelectionDao(): SessionCategorySelectionDao
+    abstract fun decisionRecommendationDao(): DecisionRecommendationDao
 
     companion object {
         const val DATABASE_NAME = "what2eat.db"

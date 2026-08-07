@@ -4,9 +4,19 @@ import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.what2eat.domain.engine.CategoryRules
+import com.what2eat.domain.engine.DecisionCandidateInput
+import com.what2eat.domain.engine.DecisionContext
+import com.what2eat.domain.engine.DecisionEngine
+import com.what2eat.domain.engine.MealHistoryInput
+import com.what2eat.domain.engine.ParticipantPreference
+import com.what2eat.domain.engine.ReasonType
+import com.what2eat.domain.engine.RecommendationItem
+import com.what2eat.domain.engine.RecommendationResult
 import com.what2eat.domain.model.AppUsageMode
 import com.what2eat.domain.model.BudgetLevel
 import com.what2eat.domain.model.CandidateCategory
+import com.what2eat.domain.model.DecisionRecommendation
 import com.what2eat.domain.model.DecisionSession
 import com.what2eat.domain.model.DistanceLevel
 import com.what2eat.domain.model.FoodCategory
@@ -23,6 +33,11 @@ import com.what2eat.domain.repository.DecisionSessionRepository
 import com.what2eat.domain.repository.FoodCategoryRepository
 import com.what2eat.domain.repository.PersonCategoryPreferenceRepository
 import com.what2eat.domain.repository.PersonProfileRepository
+import com.what2eat.domain.search.PlatformSearchLauncher
+import com.what2eat.domain.search.SearchLauncher
+import com.what2eat.domain.search.SearchPlatform
+import com.what2eat.domain.search.SearchQueryBuilder
+import com.what2eat.domain.usecase.CompleteDecisionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +46,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
+import kotlin.math.roundToLong
 
 @HiltViewModel
 class DecisionViewModel @Inject constructor(
@@ -39,12 +55,18 @@ class DecisionViewModel @Inject constructor(
     private val foodCategoryRepository: FoodCategoryRepository,
     private val preferenceRepository: PersonCategoryPreferenceRepository,
     private val usageModeRepository: AppUsageModeRepository,
+    private val decisionEngine: DecisionEngine,
+    private val searchLauncher: SearchLauncher,
+    private val platformSearchLauncher: PlatformSearchLauncher,
+    private val completeDecisionUseCase: CompleteDecisionUseCase,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
     companion object {
         private const val TAG = "DecisionViewModel"
         private const val PRIMARY_ID = "person_primary"
+        private const val DAY_MS = 86_400_000L
+        private const val RANDOM_SEED = 20260807L
     }
 
     /** 是否从首页"先决定吃什么"进入（true）——用于决定是否提示覆盖活动会话 */
@@ -158,6 +180,7 @@ class DecisionViewModel @Inject constructor(
 
             // 确定当前步骤
             val step = when {
+                session.status == SessionStatus.COMPLETED -> DecisionStep.COMPLETED
                 session.status == SessionStatus.READY -> DecisionStep.RESULTS
                 session.status == SessionStatus.SELECTING && participants.any { !it.completed } -> {
                     val nextUncompleted = participants.firstOrNull { !it.completed }
@@ -185,6 +208,57 @@ class DecisionViewModel @Inject constructor(
                 candidates = sessionRepository.generateCandidates(session.id)
             }
 
+            // 恢复推荐状态（READY 会话可能是推荐页或结果页）
+            var recommendation: RecommendationView? = null
+            var rejectedIds = emptySet<String>()
+            var rerollCount = 0
+            var exhausted = false
+            var completedView: RecommendationView? = null
+            if (session.status == SessionStatus.READY) {
+                val snapshots = sessionRepository.getRecommendations(session.id)
+                if (snapshots.isNotEmpty()) {
+                    rejectedIds = snapshots.filter { it.rejected }.map { it.categoryId }.toSet()
+                    rerollCount = snapshots.count { it.rejected }
+                    val current = snapshots
+                        .filterNot { it.rejected || it.selected }
+                        .maxByOrNull { it.createdAt }
+                    if (current != null) {
+                        val cat = allCategories.firstOrNull { it.id == current.categoryId }
+                        val name = cat?.name ?: current.categoryId
+                        val parent = cat?.parentId?.let { pid ->
+                            allCategories.firstOrNull { it.id == pid }?.name
+                        }
+                        recommendation = RecommendationView(
+                            categoryId = current.categoryId,
+                            categoryName = name,
+                            parentCategoryName = parent,
+                            matchLevel = matchLevelFromWeight(current.weight),
+                            reasonTypes = current.reasonKeys.mapNotNull { runCatching { ReasonType.valueOf(it) }.getOrNull() },
+                            weight = current.weight
+                        )
+                    }
+                    exhausted = recommendation == null
+                }
+            } else if (session.status == SessionStatus.COMPLETED) {
+                val snapshots = sessionRepository.getRecommendations(session.id)
+                val selected = snapshots.firstOrNull { it.selected }
+                if (selected != null) {
+                    val selCat = allCategories.firstOrNull { it.id == selected.categoryId }
+                    val name = selCat?.name ?: selected.categoryId
+                    val parent = selCat?.parentId?.let { pid ->
+                        allCategories.firstOrNull { it.id == pid }?.name
+                    }
+                    completedView = RecommendationView(
+                        categoryId = selected.categoryId,
+                        categoryName = name,
+                        parentCategoryName = parent,
+                        matchLevel = matchLevelFromWeight(selected.weight),
+                        reasonTypes = selected.reasonKeys.mapNotNull { runCatching { ReasonType.valueOf(it) }.getOrNull() },
+                        weight = selected.weight
+                    )
+                }
+            }
+
             _uiState.value = _uiState.value.copy(
                 activeSessionId = session.id,
                 availableProfiles = profiles,
@@ -204,6 +278,13 @@ class DecisionViewModel @Inject constructor(
                 currentPersonSelections = currentSelections,
                 currentPersonPreferences = currentPrefs,
                 candidates = candidates,
+                recommendation = recommendation,
+                rejectedIds = rejectedIds,
+                rerollCount = rerollCount,
+                recommendationExhausted = exhausted,
+                isLastRecommendation = !exhausted &&
+                    (recommendation != null && candidates.size - rejectedIds.size <= 1),
+                completedCategory = completedView,
                 step = step,
                 isLoading = false
             )
@@ -536,6 +617,313 @@ class DecisionViewModel @Inject constructor(
         }
     }
 
+    // ── Stage 2.2 最终推荐 ──
+
+    /** 从候选页生成最终推荐 */
+    fun generateRecommendation() {
+        val sessionId = _uiState.value.activeSessionId ?: return
+        viewModelScope.launch {
+            try {
+                _uiState.value = _uiState.value.copy(isComputingRecommendation = true)
+                val result = runEngine(sessionId, _uiState.value.rejectedIds)
+                applyRecommendationResult(result, sessionId, rejectedIds = _uiState.value.rejectedIds)
+                _uiState.value = _uiState.value.copy(
+                    isComputingRecommendation = false,
+                    step = DecisionStep.RECOMMENDATION
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "generateRecommendation: failed", e)
+                _uiState.value = _uiState.value.copy(
+                    isComputingRecommendation = false,
+                    errorMessage = "推荐计算失败: ${e.message ?: "未知错误"}"
+                )
+            }
+        }
+    }
+
+    /** 换一个：当前结果加入本轮拒绝列表，从剩余候选重新加权随机 */
+    fun rerollRecommendation() {
+        val sessionId = _uiState.value.activeSessionId ?: return
+        val current = _uiState.value.recommendation ?: return
+        viewModelScope.launch {
+            try {
+                _uiState.value = _uiState.value.copy(isComputingRecommendation = true)
+                // 标记当前推荐为已拒绝并持久化
+                sessionRepository.markRecommendationRejected(sessionId, current.categoryId)
+                val newRejected = _uiState.value.rejectedIds + current.categoryId
+                val newReroll = _uiState.value.rerollCount + 1
+
+                val result = runEngine(sessionId, newRejected)
+                applyRecommendationResult(result, sessionId, newRejected, newReroll)
+                _uiState.value = _uiState.value.copy(
+                    isComputingRecommendation = false,
+                    rerollCount = newReroll,
+                    step = DecisionStep.RECOMMENDATION
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "rerollRecommendation: failed", e)
+                _uiState.value = _uiState.value.copy(
+                    isComputingRecommendation = false,
+                    errorMessage = "换一个失败: ${e.message ?: "未知错误"}"
+                )
+            }
+        }
+    }
+
+    /** 确认"就吃这个"：通过统一完成用例保存最终结果，会话 READY → COMPLETED，写入历史 */
+    fun confirmRecommendation() {
+        val sessionId = _uiState.value.activeSessionId ?: return
+        val current = _uiState.value.recommendation ?: return
+        viewModelScope.launch {
+            try {
+                // 统一完成用例：单人与双人共用唯一入口，内部单事务完成 session 更新 + 推荐标记
+                completeDecisionUseCase(
+                    sessionId = sessionId,
+                    categoryId = current.categoryId,
+                    rerollCount = _uiState.value.rerollCount,
+                    finalWeight = current.weight
+                )
+                _uiState.value = _uiState.value.copy(
+                    completedCategory = current,
+                    step = DecisionStep.COMPLETED
+                )
+                Log.d(TAG, "confirmRecommendation: session completed, picked=${current.categoryName}")
+            } catch (e: Exception) {
+                Log.e(TAG, "confirmRecommendation: failed", e)
+                _uiState.value = _uiState.value.copy(errorMessage = "保存最终结果失败: ${e.message ?: "未知错误"}")
+            }
+        }
+    }
+
+    /** 从推荐页返回候选列表（看看其他候选） */
+    fun goBackToCandidates() {
+        _uiState.value = _uiState.value.copy(step = DecisionStep.RESULTS)
+    }
+
+    /** 空候选时返回修改条件 */
+    fun returnToConditionsFromRecommendation() {
+        val sessionId = _uiState.value.activeSessionId
+        viewModelScope.launch {
+            if (sessionId != null) {
+                try { sessionRepository.cancelSession(sessionId) } catch (_: Exception) {}
+            }
+            resetToConditions()
+        }
+    }
+
+    /** 重新看看这些选项（清空拒绝列表，但保留会话） */
+    fun resetRejectedAndRecompute() {
+        val sessionId = _uiState.value.activeSessionId ?: return
+        viewModelScope.launch {
+            try {
+                _uiState.value = _uiState.value.copy(isComputingRecommendation = true)
+                val result = runEngine(sessionId, emptySet())
+                applyRecommendationResult(result, sessionId, emptySet(), 0)
+                _uiState.value = _uiState.value.copy(
+                    isComputingRecommendation = false,
+                    rerollCount = 0,
+                    recommendationExhausted = false,
+                    step = DecisionStep.RECOMMENDATION
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "resetRejectedAndRecompute: failed", e)
+                _uiState.value = _uiState.value.copy(
+                    isComputingRecommendation = false,
+                    errorMessage = "重新计算失败: ${e.message ?: "未知错误"}"
+                )
+            }
+        }
+    }
+
+    /** 运行引擎 */
+    private suspend fun runEngine(
+        sessionId: String,
+        rejectedIds: Set<String>
+    ): RecommendationResult {
+        val st = _uiState.value
+        val candidates = st.candidates
+        if (candidates.isEmpty()) {
+            return RecommendationResult(null, emptyList(), exhausted = true)
+        }
+
+        // 组装候选输入
+        val candidateInputs = candidates.map { c ->
+            val info = CategoryRules.infoFor(c.categoryId)
+            DecisionCandidateInput(
+                categoryId = c.categoryId,
+                categoryName = c.categoryName,
+                parentCategoryName = c.parentCategoryName,
+                priceLevel = info.priceLevel,
+                supportedMealModes = info.supportedMealModes,
+                attributes = info.attributes,
+                selectionsByPerson = c.selectionsByPerson
+            )
+        }
+
+        // 参与者偏好
+        val orderedIds = orderedParticipantIds()
+        val profiles = st.availableProfiles
+        val participants = orderedIds.map { personId ->
+            val prefs = preferenceRepository.getByPerson(personId)
+            ParticipantPreference(
+                personId = personId,
+                name = profiles.firstOrNull { it.id == personId }?.name ?: "用户",
+                isPrimary = personId == PRIMARY_ID,
+                longTermLevelByCategory = prefs.associate { it.categoryId to it.preferenceLevel },
+                hardExcludedCategoryIds = prefs.filter { it.hardExcluded }.map { it.categoryId }.toSet()
+            )
+        }
+
+        // 上下文
+        val context = DecisionContext(
+            mealModes = st.mealModes,
+            moodTags = st.moodTags,
+            budgetLevel = st.budgetLevel
+        )
+
+        // 历史防重复（最近一次完成时间）
+        val now = System.currentTimeMillis()
+        val historyMap = HashMap<String, Int>()
+        for ((categoryId, completedAt) in sessionRepository.getCompletedHistory()) {
+            val days = ((now - completedAt) / DAY_MS).toInt().coerceAtLeast(0)
+            val existing = historyMap[categoryId]
+            if (existing == null || days < existing) historyMap[categoryId] = days
+        }
+        val history = candidateInputs.map {
+            MealHistoryInput(it.categoryId, historyMap[it.categoryId])
+        }
+
+        // Stage 2.2 封版：历史防重复调试输出（仅 Logcat，不展示给普通用户）
+        logScoreDebug(candidateInputs, participants, context, historyMap)
+
+        return decisionEngine.recommend(
+            candidates = candidateInputs,
+            participants = participants,
+            context = context,
+            history = history,
+            rejectedIds = rejectedIds
+        )
+    }
+
+    /**
+     * Stage 2.2 封版：历史防重复调试输出（仅 Logcat，不展示给普通用户）。
+     * 证明 DecisionEngine 实际读取 MealHistory：刚吃过的候选 historyScore 为负，从未吃过的为 +15。
+     * 分项与 CategoryRules/引擎一致，但不修改引擎主逻辑。
+     */
+    private fun logScoreDebug(
+        candidates: List<DecisionCandidateInput>,
+        participants: List<ParticipantPreference>,
+        context: DecisionContext,
+        historyMap: Map<String, Int>
+    ) {
+        try {
+            val base = 100
+            val primaryName = participants.firstOrNull()?.name ?: "用户"
+            for (c in candidates) {
+                val selection = c.selectionsByPerson[participants.firstOrNull()?.personId]
+                val selectionScore = if (selection == SelectionType.WANT) 40 else 0
+                val longTermLevel = participants.firstOrNull()
+                    ?.longTermLevelByCategory?.get(c.categoryId) ?: 0
+                val longTerm = when (longTermLevel) {
+                    2 -> 30; 1 -> 15; 0 -> 0; -1 -> -20; else -> -40
+                }
+                val preferenceScore = selectionScore + longTerm
+                val conditionScore = CategoryRules.moodScore(c.attributes, context.moodTags).score
+                val mealScore = CategoryRules.mealModeScore(c.supportedMealModes, context.mealModes).score
+                val budgetScore = CategoryRules.budgetScore(c.priceLevel, context.budgetLevel).score
+                val daysAgo = historyMap[c.categoryId]
+                val historyScore = CategoryRules.historyScore(daysAgo)
+                val raw = base + preferenceScore + conditionScore + mealScore + budgetScore + historyScore
+                val finalWeight = maxOf(1.0, raw.toDouble())
+                Log.d(
+                    TAG,
+                    "[ScoreDebug] ${c.categoryName} | baseScore=$base | preferenceScore=$preferenceScore" +
+                        " (selection=$selectionScore, longTerm=$longTerm) | conditionScore=$conditionScore" +
+                        " | mealScore=$mealScore | budgetScore=$budgetScore" +
+                        " | historyScore=$historyScore (daysAgo=${daysAgo ?: "never"})" +
+                        " | finalWeight=$finalWeight | primary=$primaryName"
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "logScoreDebug: failed", e)
+        }
+    }
+
+    /** 应用推荐结果到 UI 状态并持久化快照 */
+    private suspend fun applyRecommendationResult(
+        result: RecommendationResult,
+        sessionId: String,
+        rejectedIds: Set<String>,
+        rerollCount: Int = 0
+    ) {
+        val recommended = result.recommended?.toView()
+        if (recommended != null) {
+            // 持久化推荐快照（当前未拒绝、未选中）
+            sessionRepository.saveRecommendation(
+                DecisionRecommendation(
+                    sessionId = sessionId,
+                    categoryId = recommended.categoryId,
+                    rank = 1,
+                    weight = recommended.weight,
+                    selected = false,
+                    rejected = false,
+                    reasonKeys = recommended.reasonTypes.map { it.name }
+                )
+            )
+        }
+        val surviving = result.allSurviving
+        _uiState.value = _uiState.value.copy(
+            recommendation = recommended,
+            survivingCandidates = surviving,
+            rejectedIds = rejectedIds,
+            rerollCount = rerollCount,
+            recommendationExhausted = result.exhausted,
+            isLastRecommendation = !result.exhausted && surviving.size <= 1
+        )
+    }
+
+    private fun RecommendationItem.toView(): RecommendationView {
+        return RecommendationView(
+            categoryId = categoryId,
+            categoryName = categoryName,
+            parentCategoryName = parentCategoryName,
+            matchLevel = matchLevel,
+            reasonTypes = reasons.map { it.type },
+            weight = weight
+        )
+    }
+
+    /** 推荐原因 → 自然中文（UI 层生成，Engine 不硬编码整段文案） */
+    fun reasonText(type: ReasonType): String {
+        return when (type) {
+            ReasonType.BOTH_WANT -> "你们都想吃"
+            ReasonType.BOTH_ACCEPT -> "你们都可以接受"
+            ReasonType.ONE_WANT_ONE_ACCEPT -> "一方想吃，另一方可以接受"
+            ReasonType.LONG_TERM_LIKE -> "你长期喜欢这类"
+            ReasonType.MATCH_MOOD -> "符合你选的今天状态"
+            ReasonType.MATCH_MEAL_MODE -> "符合用餐方式"
+            ReasonType.MATCH_BUDGET -> "符合预算"
+            ReasonType.NOT_EATEN_RECENTLY -> "最近没有吃过"
+            ReasonType.NEVER_EATEN -> "还没有试过"
+        }
+    }
+
+    fun matchLevelLabel(recommendation: RecommendationView): String {
+        return when (recommendation.matchLevel) {
+            com.what2eat.domain.engine.MatchLevel.HIGH -> "很高"
+            com.what2eat.domain.engine.MatchLevel.MEDIUM -> "较高"
+            com.what2eat.domain.engine.MatchLevel.LOW -> "一般"
+        }
+    }
+
+    private fun matchLevelFromWeight(weight: Double): com.what2eat.domain.engine.MatchLevel {
+        return when {
+            weight >= 170.0 -> com.what2eat.domain.engine.MatchLevel.HIGH
+            weight >= 130.0 -> com.what2eat.domain.engine.MatchLevel.MEDIUM
+            else -> com.what2eat.domain.engine.MatchLevel.LOW
+        }
+    }
+
     // ── Candidate Reason Lines ──
 
     fun getCandidateReasonLines(candidate: CandidateCategory): List<String> {
@@ -609,9 +997,11 @@ class DecisionViewModel @Inject constructor(
             }
             DecisionStep.HANDOFF,
             DecisionStep.CATEGORY_SELECT,
-            DecisionStep.RESULTS -> {
+            DecisionStep.RESULTS,
+            DecisionStep.RECOMMENDATION -> {
                 _uiState.value = _uiState.value.copy(showExitDialog = true)
             }
+            DecisionStep.COMPLETED -> onExit()
         }
     }
 
@@ -831,5 +1221,58 @@ class DecisionViewModel @Inject constructor(
             isLoading = false,
             selectedParticipantIds = shown.map { it.id }.toSet()
         )
+    }
+
+    // ── Stage 3.1 通用搜索承接 ──
+    // 注意：以下操作只改变 UI 状态，绝不触碰会话状态（COMPLETED 保持不变）。
+
+    /** 打开"去找餐厅"搜索面板 */
+    fun showSearchPanel() {
+        _uiState.value = _uiState.value.copy(showSearchPanel = true)
+    }
+
+    /** 关闭搜索面板（不影响已完成决策） */
+    fun hideSearchPanel() {
+        _uiState.value = _uiState.value.copy(showSearchPanel = false)
+    }
+
+    /** 完成分类对应的搜索关键词（areaText 本阶段为空） */
+    fun completedSearchQuery(): String {
+        val name = _uiState.value.completedCategory?.categoryName ?: return ""
+        return SearchQueryBuilder.build(name, null).query
+    }
+
+    /** 地图搜索 */
+    fun onMapSearch() {
+        val query = completedSearchQuery()
+        val result = platformSearchLauncher.launch(SearchPlatform.MAP, query)
+        _uiState.value = _uiState.value.copy(searchMessage = result.message)
+    }
+
+    /** 浏览器搜索 */
+    fun onBrowserSearch() {
+        val query = completedSearchQuery()
+        val result = platformSearchLauncher.launch(SearchPlatform.BROWSER, query)
+        _uiState.value = _uiState.value.copy(searchMessage = result.message)
+    }
+
+    /** 复制关键词 */
+    fun onCopySearch() {
+        val query = completedSearchQuery()
+        val result = searchLauncher.copyQuery(query)
+        val message = if (result.success) "已复制：$query" else result.message
+        _uiState.value = _uiState.value.copy(searchMessage = message)
+    }
+
+    /** Stage 3.2：大众点评 / 美团 快捷承接 */
+    fun onPlatformSearch(platform: SearchPlatform) {
+        val query = completedSearchQuery()
+        val result = platformSearchLauncher.launch(platform, query)
+        _uiState.value = _uiState.value.copy(searchMessage = result.message)
+    }
+
+    /** 消费 Snackbar 消息（UI 展示后调用，避免重复） */
+    fun consumeSearchMessage() {
+        _uiState.value = _uiState.value.copy(searchMessage = null)
     }
 }

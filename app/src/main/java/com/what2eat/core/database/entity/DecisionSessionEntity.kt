@@ -19,6 +19,9 @@ data class DecisionSessionEntity(
     val moodTags: String,   // 逗号分隔的 MoodTag ordinal
     val budgetLevel: Int,
     val distanceLevel: Int,
+    val selectedCategoryId: String?,
+    val rerollCount: Int,
+    val finalWeight: Double,
     val createdAt: Long,
     val updatedAt: Long
 )
