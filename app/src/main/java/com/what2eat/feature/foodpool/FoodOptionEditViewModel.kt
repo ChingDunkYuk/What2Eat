@@ -29,13 +29,21 @@ data class FoodOptionFormState(
     val enabled: Boolean = true,
     val nameError: String? = null,
     val isSaving: Boolean = false,
-    val saved: Boolean = false
-)
+    val saved: Boolean = false,
+    val hasChanges: Boolean = false
+) {
+    /** 名称已 trim 且非空，可保存 */
+    val canSave: Boolean get() = name.isNotBlank()
+}
 
 @HiltViewModel
 class FoodOptionEditViewModel @Inject constructor(
     private val repository: SavedOptionRepository
 ) : ViewModel() {
+
+    /** 是否有未保存的修改（新增有输入或编辑有改动） */
+    val hasChanges: Boolean
+        get() = _uiState.value.hasChanges
 
     private val _uiState = MutableStateFlow(FoodOptionFormState())
     val uiState: StateFlow<FoodOptionFormState> = _uiState.asStateFlow()
@@ -61,33 +69,34 @@ class FoodOptionEditViewModel @Inject constructor(
                 estimatedMinutes = option.estimatedMinutes?.toString() ?: "",
                 notes = option.notes ?: "",
                 sourceUrl = option.sourceUrl ?: "",
-                enabled = option.enabled
+                enabled = option.enabled,
+                hasChanges = false
             )
         }
     }
 
     fun onNameChange(v: String) {
-        _uiState.value = _uiState.value.copy(name = v, nameError = null)
+        _uiState.value = _uiState.value.copy(name = v, nameError = null, hasChanges = true)
     }
 
     fun onTypeChange(t: SavedOptionType) {
-        _uiState.value = _uiState.value.copy(type = t)
+        _uiState.value = _uiState.value.copy(type = t, hasChanges = true)
     }
 
     fun toggleCollection(c: CollectionType) {
         val cur = _uiState.value.collections
         val next = if (c in cur) cur - c else cur + c
-        _uiState.value = _uiState.value.copy(collections = next)
+        _uiState.value = _uiState.value.copy(collections = next, hasChanges = true)
     }
 
-    fun onAreaChange(v: String) = _uiState.value.copy(areaText = v).let { _uiState.value = it }
-    fun onNotesChange(v: String) = _uiState.value.copy(notes = v).let { _uiState.value = it }
-    fun onUrlChange(v: String) = _uiState.value.copy(sourceUrl = v).let { _uiState.value = it }
-    fun onMinutesChange(v: String) = _uiState.value.copy(estimatedMinutes = v).let { _uiState.value = it }
-    fun toggleEnabled() = _uiState.value.copy(enabled = !_uiState.value.enabled).let { _uiState.value = it }
+    fun onAreaChange(v: String) = _uiState.value.copy(areaText = v, hasChanges = true).let { _uiState.value = it }
+    fun onNotesChange(v: String) = _uiState.value.copy(notes = v, hasChanges = true).let { _uiState.value = it }
+    fun onUrlChange(v: String) = _uiState.value.copy(sourceUrl = v, hasChanges = true).let { _uiState.value = it }
+    fun onMinutesChange(v: String) = _uiState.value.copy(estimatedMinutes = v, hasChanges = true).let { _uiState.value = it }
+    fun toggleEnabled() = _uiState.value.copy(enabled = !_uiState.value.enabled, hasChanges = true).let { _uiState.value = it }
 
     fun onTagsChange(tags: Set<String>) {
-        _uiState.value = _uiState.value.copy(tags = LinkedHashSet(tags))
+        _uiState.value = _uiState.value.copy(tags = LinkedHashSet(tags), hasChanges = true)
     }
 
     fun save() {
@@ -114,7 +123,7 @@ class FoodOptionEditViewModel @Inject constructor(
             repository.upsert(option)
             repository.setCollections(option.id, s.collections)
             repository.setTags(option.id, s.tags.filter { it.isNotBlank() }.toSet())
-            _uiState.value = _uiState.value.copy(isSaving = true, saved = true)
+            _uiState.value = _uiState.value.copy(isSaving = true, saved = true, hasChanges = false)
         }
     }
 }

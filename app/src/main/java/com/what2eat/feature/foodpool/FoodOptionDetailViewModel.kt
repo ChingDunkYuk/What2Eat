@@ -76,8 +76,15 @@ class FoodOptionDetailViewModel @Inject constructor(
     fun setPreference(personId: String, level: OptionPreferenceLevel) {
         val optionId = parseOptionId() ?: return
         viewModelScope.launch {
+            val existing = optionRepository.getPreferences(optionId)
+                .firstOrNull { it.personId == personId }
             optionRepository.setPreference(
-                PersonOptionPreference(personId = personId, savedOptionId = optionId, preferenceLevel = level)
+                PersonOptionPreference(
+                    personId = personId,
+                    savedOptionId = optionId,
+                    preferenceLevel = level,
+                    hardExcluded = existing?.hardExcluded ?: false
+                )
             )
         }
     }

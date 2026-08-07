@@ -103,8 +103,18 @@ fun FoodOptionDetailScreen(
             Text(option.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
             FilterChip(selected = true, onClick = {}, label = { Text(option.optionType.label) })
-            if (!option.enabled) {
-                Text("已停用", color = MaterialTheme.colorScheme.error)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("状态：", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = if (option.enabled) "启用中" else "已停用",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (option.enabled) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.error
+                )
             }
 
             // 所属列表
