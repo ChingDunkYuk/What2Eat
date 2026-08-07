@@ -20,6 +20,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.what2eat.feature.decision.DecisionFlowScreen
+import com.what2eat.feature.foodpool.FoodOptionDetailScreen
+import com.what2eat.feature.foodpool.FoodOptionEditScreen
 import com.what2eat.feature.foodpool.FoodPoolScreen
 import com.what2eat.feature.history.HistoryScreen
 import com.what2eat.feature.home.HomeScreen
@@ -102,7 +104,48 @@ fun What2EatNavHost() {
             }
 
             composable(BottomNavDestination.FoodPool.route) {
-                FoodPoolScreen()
+                FoodPoolScreen(
+                    onAddClick = {
+                        navController.navigate(What2EatRoutes.foodOptionEditRoute(optionId = null))
+                    },
+                    onOptionClick = { option ->
+                        navController.navigate(What2EatRoutes.foodOptionDetailRoute(option.id))
+                    }
+                )
+            }
+
+            // ── 吃饭池：新增/编辑 ──
+            composable(
+                route = What2EatRoutes.FOOD_OPTION_EDIT,
+                arguments = listOf(
+                    navArgument("optionId") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    }
+                )
+            ) { entry ->
+                val optionId = entry.arguments?.getString("optionId")?.takeIf { it.isNotBlank() }
+                FoodOptionEditScreen(
+                    optionId = optionId,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            // ── 吃饭池：详情 ──
+            composable(
+                route = What2EatRoutes.FOOD_OPTION_DETAIL,
+                arguments = listOf(
+                    navArgument("optionId") { type = NavType.StringType }
+                )
+            ) { entry ->
+                val optionId = entry.arguments?.getString("optionId") ?: return@composable
+                FoodOptionDetailScreen(
+                    optionId = optionId,
+                    onBack = { navController.popBackStack() },
+                    onEdit = { id ->
+                        navController.navigate(What2EatRoutes.foodOptionEditRoute(id))
+                    }
+                )
             }
 
             composable(BottomNavDestination.History.route) {

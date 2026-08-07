@@ -47,9 +47,14 @@ object What2EatRoutes {
     const val PLACEHOLDER_POOL = "placeholder/pool"
     const val PREFERENCE = "preference/{personId}"
     const val DECISION_FLOW = "decision_flow?startNew={startNew}"
+    const val FOOD_OPTION_EDIT = "food_pool/edit?optionId={optionId}"
+    const val FOOD_OPTION_DETAIL = "food_pool/detail/{optionId}"
 
     fun preferenceRoute(personId: String): String = "preference/$personId"
     fun decisionFlowRoute(startNew: Boolean): String = "decision_flow?startNew=$startNew"
+    fun foodOptionEditRoute(optionId: String?): String =
+        "food_pool/edit?optionId=${optionId ?: ""}"
+    fun foodOptionDetailRoute(optionId: String): String = "food_pool/detail/$optionId"
 }
 
 /** 底部导航项列表 */

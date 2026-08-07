@@ -174,3 +174,84 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_decision_recommendation_sessionId` ON `decision_recommendation` (`sessionId`)")
     }
 }
+
+/**
+ * MIGRATION_4_5: v4 → v5
+ * Stage 4 吃饭池：新增 4 张表
+ * 1. saved_option 吃饭选项
+ * 2. saved_option_collection 选项-列表关系（联合主键，多列表）
+ * 3. saved_option_tag 选项-标签关系
+ * 4. person_option_preference 人物-具体选项偏好
+ * 非 destructive：只新增表，不清空任何人物/偏好/决策/历史数据。
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // ── 1. saved_option 吃饭选项 ──
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `saved_option` (
+                `id` TEXT NOT NULL,
+                `name` TEXT NOT NULL,
+                `optionType` INTEGER NOT NULL DEFAULT 0,
+                `enabled` INTEGER NOT NULL DEFAULT 1,
+                `sourcePlatform` INTEGER NOT NULL DEFAULT 0,
+                `sourceUrl` TEXT,
+                `sourcePackage` TEXT,
+                `areaText` TEXT,
+                `priceLevel` INTEGER,
+                `estimatedMinutes` INTEGER,
+                `notes` TEXT,
+                `coverUri` TEXT,
+                `importStatus` INTEGER NOT NULL DEFAULT 0,
+                `createdAt` INTEGER NOT NULL DEFAULT 0,
+                `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                `lastChosenAt` INTEGER,
+                PRIMARY KEY(`id`)
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_saved_option_name` ON `saved_option` (`name`)")
+
+        // ── 2. saved_option_collection 选项-列表关系 ──
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `saved_option_collection` (
+                `savedOptionId` TEXT NOT NULL,
+                `collectionType` INTEGER NOT NULL,
+                `createdAt` INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(`savedOptionId`, `collectionType`),
+                FOREIGN KEY(`savedOptionId`) REFERENCES `saved_option`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent()
+        )
+
+        // ── 3. saved_option_tag 选项-标签关系 ──
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `saved_option_tag` (
+                `savedOptionId` TEXT NOT NULL,
+                `tagId` TEXT NOT NULL,
+                PRIMARY KEY(`savedOptionId`, `tagId`),
+                FOREIGN KEY(`savedOptionId`) REFERENCES `saved_option`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_saved_option_tag_tagId` ON `saved_option_tag` (`tagId`)")
+
+        // ── 4. person_option_preference 人物-具体选项偏好 ──
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `person_option_preference` (
+                `personId` TEXT NOT NULL,
+                `savedOptionId` TEXT NOT NULL,
+                `preferenceLevel` INTEGER NOT NULL DEFAULT 0,
+                `hardExcluded` INTEGER NOT NULL DEFAULT 0,
+                `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(`personId`, `savedOptionId`),
+                FOREIGN KEY(`savedOptionId`) REFERENCES `saved_option`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_person_option_preference_savedOptionId` ON `person_option_preference` (`savedOptionId`)")
+    }
+}
