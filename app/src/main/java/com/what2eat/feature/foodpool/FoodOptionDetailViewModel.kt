@@ -57,12 +57,15 @@ class FoodOptionDetailViewModel @Inject constructor(
                 personRepository.observeEnabled()
             ) { option, cols, tags, prefs, profiles ->
                 val profileByName = profiles.associateBy { it.id }
-                val prefUi = prefs.map { p ->
+                val prefByPerson = prefs.associateBy { it.personId }
+                // 为每个已启用人物都生成一行偏好（未设置时回退默认值），保证能分别点击设置
+                val prefUi = profiles.map { profile ->
+                    val existing = prefByPerson[profile.id]
                     OptionPreferenceUi(
-                        personId = p.personId,
-                        personName = profileByName[p.personId]?.name ?: p.personId,
-                        level = p.preferenceLevel,
-                        hardExcluded = p.hardExcluded
+                        personId = profile.id,
+                        personName = profileByName[profile.id]?.name ?: profile.name,
+                        level = existing?.preferenceLevel ?: OptionPreferenceLevel.NEUTRAL,
+                        hardExcluded = existing?.hardExcluded ?: false
                     )
                 }
                 FoodOptionDetailState(

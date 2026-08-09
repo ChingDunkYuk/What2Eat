@@ -32,10 +32,14 @@ enum class CollectionType(val label: String) {
     AVOIDED("踩雷")
 }
 
-/** 具体吃饭选项偏好等级 */
-enum class OptionPreferenceLevel(val label: String) {
-    VERY_LIKE("很喜欢"),
-    LIKE("喜欢"),
-    NEUTRAL("一般"),
-    DISLIKE("不喜欢")
+/**
+ * 具体吃饭选项偏好等级（5 级，对应 -2 ~ 2）。
+ * ordinal 顺序即持久化数值：0=非常不喜欢 1=不太喜欢 2=无所谓 3=喜欢 4=非常喜欢。
+ */
+enum class OptionPreferenceLevel(val label: String, val value: Int) {
+    VERY_DISLIKE("非常不喜欢", -2),
+    DISLIKE("不太喜欢", -1),
+    NEUTRAL("无所谓", 0),
+    LIKE("喜欢", 1),
+    VERY_LIKE("非常喜欢", 2)
 }

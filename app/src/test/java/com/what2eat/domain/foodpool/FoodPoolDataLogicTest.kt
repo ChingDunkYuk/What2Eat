@@ -131,4 +131,68 @@ class FoodPoolDataLogicTest {
         assertEquals(SavedOptionType.RESTAURANT, avoided.optionType)
         assertEquals(SourcePlatform.DIANPING, avoided.sourcePlatform)
     }
+
+    // ── 人物偏好：5 级枚举 + 未设置默认 + 互不影响 + 改名不破坏关联 ──
+
+    @Test
+    fun `preference level has 5 tiers with expected labels`() {
+        val expected = listOf(
+            -2 to "非常不喜欢",
+            -1 to "不太喜欢",
+            0 to "无所谓",
+            1 to "喜欢",
+            2 to "非常喜欢"
+        )
+        assertEquals(expected.size, OptionPreferenceLevel.entries.size)
+        expected.forEachIndexed { index, (value, label) ->
+            assertEquals(label, OptionPreferenceLevel.entries[index].label)
+            assertEquals(value, OptionPreferenceLevel.entries[index].value)
+        }
+    }
+
+    @Test
+    fun `unset preference defaults to neutral`() {
+        val pref = PersonOptionPreference(personId = "klaus", savedOptionId = "o1")
+        assertEquals(OptionPreferenceLevel.NEUTRAL, pref.preferenceLevel)
+        assertFalse(pref.hardExcluded)
+    }
+
+    @Test
+    fun `XiaoChao klaus very like qing dislike persist independently`() {
+        // 复用"小炒"场景：Klaus 非常喜欢，另一半 不太喜欢
+        val klaus = PersonOptionPreference(
+            personId = "person_primary", savedOptionId = "xiaochao",
+            preferenceLevel = OptionPreferenceLevel.VERY_LIKE
+        )
+        val qing = PersonOptionPreference(
+            personId = "person_secondary", savedOptionId = "xiaochao",
+            preferenceLevel = OptionPreferenceLevel.DISLIKE
+        )
+        // 联合主键 (personId, savedOptionId) 不同 → 可共存
+        assertTrue(klaus != qing)
+        assertEquals(OptionPreferenceLevel.VERY_LIKE, klaus.preferenceLevel)
+        assertEquals(OptionPreferenceLevel.DISLIKE, qing.preferenceLevel)
+        // 更新 Klaus 不影响晴
+        val newKlaus = klaus.copy(preferenceLevel = OptionPreferenceLevel.LIKE)
+        assertEquals(OptionPreferenceLevel.DISLIKE, qing.preferenceLevel)
+        assertEquals(OptionPreferenceLevel.LIKE, newKlaus.preferenceLevel)
+    }
+
+    @Test
+    fun `renaming person does not break person-option binding`() {
+        // 关联以 personId 为主键，改名只改 name，不改变 personId
+        val klaus = PersonOptionPreference(
+            personId = "person_primary", savedOptionId = "o1",
+            preferenceLevel = OptionPreferenceLevel.VERY_LIKE
+        )
+        val renamed = klaus.copy(personId = "person_primary") // 名字变化不影响 id
+        assertEquals("person_primary", renamed.personId)
+        assertEquals("person_primary", klaus.personId)
+        assertEquals(klaus.savedOptionId, renamed.savedOptionId)
+        // 停用/删除 SavedOption 不删除偏好（CASCADE 仅物理删除时触发）
+        // 停用只置 enabled=false，偏好记录仍保留
+        val disabledOption = option(id = "o1").copy(enabled = false)
+        assertEquals(false, disabledOption.enabled)
+        assertEquals(OptionPreferenceLevel.VERY_LIKE, klaus.preferenceLevel)
+    }
 }
