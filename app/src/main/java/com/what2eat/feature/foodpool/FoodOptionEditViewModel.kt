@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.what2eat.domain.foodpool.FoodOptionForm
 import com.what2eat.domain.model.CollectionType
+import com.what2eat.domain.model.ImportStatus
 import com.what2eat.domain.model.SavedOption
 import com.what2eat.domain.model.SavedOptionType
 import com.what2eat.domain.repository.SavedOptionRepository
@@ -27,6 +28,7 @@ data class FoodOptionFormState(
     val notes: String = "",
     val sourceUrl: String = "",
     val enabled: Boolean = true,
+    val importStatus: ImportStatus = ImportStatus.COMPLETE,
     val nameError: String? = null,
     val isSaving: Boolean = false,
     val saved: Boolean = false,
@@ -70,6 +72,7 @@ class FoodOptionEditViewModel @Inject constructor(
                 notes = option.notes ?: "",
                 sourceUrl = option.sourceUrl ?: "",
                 enabled = option.enabled,
+                importStatus = option.importStatus,
                 hasChanges = false
             )
         }
@@ -118,7 +121,9 @@ class FoodOptionEditViewModel @Inject constructor(
                 estimatedMinutes = s.estimatedMinutes.toIntOrNull(),
                 notes = s.notes,
                 sourceUrl = s.sourceUrl,
-                enabled = s.enabled
+                enabled = s.enabled,
+                // 待整理项保存后标记为整理完成
+                markCompleted = s.importStatus == ImportStatus.NEEDS_REVIEW
             )
             repository.upsert(option)
             repository.setCollections(option.id, s.collections)

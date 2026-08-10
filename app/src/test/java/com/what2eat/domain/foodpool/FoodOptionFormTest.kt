@@ -1,6 +1,7 @@
 package com.what2eat.domain.foodpool
 
 import com.what2eat.domain.model.CollectionType
+import com.what2eat.domain.model.ImportStatus
 import com.what2eat.domain.model.SavedOption
 import com.what2eat.domain.model.SavedOptionType
 import org.junit.Assert.assertEquals
@@ -124,5 +125,40 @@ class FoodOptionFormTest {
             estimatedMinutes = null, notes = null, sourceUrl = null, enabled = true
         )
         assertEquals(created.id, edited.id)
+    }
+
+    // ── 待整理闭环：补齐资料保存后标记 COMPLETE ──
+
+    @Test
+    fun `build with markCompleted turns needs-review into complete`() {
+        val review = SavedOption(
+            id = "review-1", name = "待整理项",
+            optionType = SavedOptionType.RESTAURANT,
+            importStatus = ImportStatus.NEEDS_REVIEW
+        )
+        val saved = FoodOptionForm.buildOption(
+            existing = review, name = "已补齐",
+            type = SavedOptionType.RESTAURANT, areaText = "天河", priceLevel = null,
+            estimatedMinutes = null, notes = null, sourceUrl = null, enabled = true,
+            markCompleted = true
+        )
+        assertEquals(ImportStatus.COMPLETE, saved.importStatus)
+        assertEquals("已补齐", saved.name)
+        assertEquals("review-1", saved.id)
+    }
+
+    @Test
+    fun `build without markCompleted preserves needs-review`() {
+        val review = SavedOption(
+            id = "review-2", name = "待整理项",
+            optionType = SavedOptionType.RESTAURANT,
+            importStatus = ImportStatus.NEEDS_REVIEW
+        )
+        val saved = FoodOptionForm.buildOption(
+            existing = review, name = "还是待整理",
+            type = SavedOptionType.RESTAURANT, areaText = null, priceLevel = null,
+            estimatedMinutes = null, notes = null, sourceUrl = null, enabled = true
+        )
+        assertEquals(ImportStatus.NEEDS_REVIEW, saved.importStatus)
     }
 }

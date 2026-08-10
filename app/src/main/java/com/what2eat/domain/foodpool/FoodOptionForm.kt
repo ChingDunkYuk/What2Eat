@@ -1,6 +1,7 @@
 package com.what2eat.domain.foodpool
 
 import com.what2eat.domain.model.CollectionType
+import com.what2eat.domain.model.ImportStatus
 import com.what2eat.domain.model.SavedOption
 import com.what2eat.domain.model.SavedOptionType
 
@@ -45,7 +46,8 @@ object FoodOptionForm {
         estimatedMinutes: Int?,
         notes: String?,
         sourceUrl: String?,
-        enabled: Boolean
+        enabled: Boolean,
+        markCompleted: Boolean = false
     ): SavedOption {
         val now = System.currentTimeMillis()
         val normalizedName = normalizeName(name)
@@ -62,6 +64,8 @@ object FoodOptionForm {
             notes = notes?.takeIf { it.isNotBlank() },
             sourceUrl = sourceUrl?.takeIf { it.isNotBlank() },
             enabled = enabled,
+            // 待整理项编辑保存后标记为整理完成（user 确认的最小闭环）
+            importStatus = if (markCompleted) ImportStatus.COMPLETE else existing?.importStatus ?: ImportStatus.COMPLETE,
             updatedAt = now
         )
     }
