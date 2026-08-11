@@ -8,6 +8,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -35,11 +36,18 @@ import com.what2eat.feature.settings.SettingsScreen
  * 单 Activity + Navigation Compose，底部四 Tab + 偏好页 + 决策流程页。
  */
 @Composable
-fun What2EatNavHost() {
+fun What2EatNavHost(initialOptionId: String? = null) {
     val navController = rememberNavController()
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
+
+    // 由外部分享"查看详情"跳入时，导航到对应详情页
+    LaunchedEffect(initialOptionId) {
+        if (!initialOptionId.isNullOrBlank()) {
+            navController.navigate(What2EatRoutes.foodOptionDetailRoute(initialOptionId))
+        }
+    }
 
     // 判断当前是否在底部 Tab 页面上（控制底栏可见性）
     val showBottomBar = bottomNavItems.any { dest ->

@@ -227,7 +227,7 @@ private fun SettingsContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
-            text = stringResource(R.string.settings_version, "0.6.0"),
+            text = stringResource(R.string.settings_version, "0.7.0"),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

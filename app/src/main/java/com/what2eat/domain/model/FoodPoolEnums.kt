@@ -1,11 +1,15 @@
 package com.what2eat.domain.model
 
-/** 吃饭选项的来源平台（Stage 4：手动新增为主，来源记录预留） */
+/** 吃饭选项的来源平台 */
 enum class SourcePlatform(val label: String) {
     MANUAL("手动添加"),
     DIANPING("大众点评"),
     MEITUAN("美团"),
-    NONE("无")
+    NONE("无"),
+    AMAP("高德地图"),
+    BAIDU_MAP("百度地图"),
+    BROWSER("浏览器"),
+    OTHER("其他")
 }
 
 /** 吃饭选项类型 */
