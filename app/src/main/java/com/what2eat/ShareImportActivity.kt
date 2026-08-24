@@ -1,6 +1,7 @@
 package com.what2eat
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -47,12 +48,29 @@ class ShareImportActivity : ComponentActivity() {
         }
     }
 
-    /** 解析来源包名：优先 calling package，其次 extras 中的包名。 */
+    /**
+     * 解析来源包名。
+     * 优先级：calling package → "source_package" extra → EXTRA_REFERRER（Uri）。
+     * 部分应用分享时 calling package 可能为 null，此时退回其余来源。
+     */
     private fun resolveSourcePackage(intent: Intent?): String? {
         if (intent == null) return null
         val caller = runCatching { getCallingPackage() }.getOrNull()
         if (!caller.isNullOrBlank()) return caller
-        return intent.getStringExtra("source_package")
-            ?: intent.getStringExtra(Intent.EXTRA_REFERRER)
+        intent.getStringExtra("source_package")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+        // EXTRA_REFERRER 常见形式："android-app://com.dianping.v1/xxx" 或 "http(s)://..."
+        val referrer = runCatching {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(Intent.EXTRA_REFERRER) as? Uri
+        }.getOrNull()
+        if (referrer != null) {
+            if (referrer.scheme.equals("android-app", ignoreCase = true)) {
+                referrer.host?.takeIf { it.isNotBlank() }?.let { return it }
+            }
+            referrer.host?.takeIf { it.isNotBlank() }?.let { return it }
+        }
+        return null
     }
 }

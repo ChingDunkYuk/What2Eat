@@ -115,6 +115,7 @@ class ShareImportTest {
         val result = DuplicateDetector.detect(
             newUrl = "HTTPS://www.dianping.com/shop/hx58",
             newName = "潮汕牛肉火锅",
+            newPlatform = SourcePlatform.DIANPING,
             existing = listOf(existing),
             existingCollections = mapOf("e1" to setOf(CollectionType.WANT_TO_TRY))
         )
@@ -164,5 +165,138 @@ class ShareImportTest {
     fun `defaults for plain text require user choice`() {
         assertNull(ShareImportDefaults.defaultType(SourcePlatform.OTHER))
         assertTrue(ShareImportDefaults.defaultCollections(SourcePlatform.OTHER).isEmpty())
+    }
+
+    // ── Stage 5 增强：SourceIdExtractor ──
+
+    @Test
+    fun `extract id from dianping shop path`() {
+        assertEquals("hx58", SourceIdExtractor.extractId("https://www.dianping.com/shop/hx58"))
+        assertEquals("123", SourceIdExtractor.extractId("https://m.dianping.com/i/shop/123"))
+    }
+
+    @Test
+    fun `extract id from meituan path`() {
+        assertEquals("456", SourceIdExtractor.extractId("https://www.meituan.com/restaurant/456"))
+        assertEquals("789", SourceIdExtractor.extractId("https://www.meituan.com/r/789?utm_source=share"))
+    }
+
+    @Test
+    fun `extract id from amap query`() {
+        assertEquals("poi-abc", SourceIdExtractor.extractId("https://uri.amap.com/marker?position=116.3,39.9&id=poi-abc&name=XX"))
+    }
+
+    @Test
+    fun `extract id from baidu uid`() {
+        assertEquals("uid-99", SourceIdExtractor.extractId("https://map.baidu.com/?qt=con&uid=uid-99"))
+        assertEquals("short1", SourceIdExtractor.extractId("https://j.map.baidu.com/short1"))
+    }
+
+    @Test
+    fun `extract id from generic shopid query`() {
+        assertEquals("88", SourceIdExtractor.extractId("https://www.example.com/r/1?shopid=88&from=app"))
+        assertNull(SourceIdExtractor.extractId("https://www.example.com/page"))
+    }
+
+    // ── Stage 5 增强：平台+ID 重复检测 ──
+
+    @Test
+    fun `duplicate detected by platform and id with different urls`() {
+        val existing = SavedOption(
+            id = "e1", name = "潮汕牛肉火锅",
+            optionType = SavedOptionType.RESTAURANT,
+            sourcePlatform = SourcePlatform.DIANPING,
+            sourceUrl = "https://www.dianping.com/shop/hx58"
+        )
+        // 不同子域/路径前缀，但业务 ID 相同
+        val result = DuplicateDetector.detect(
+            newUrl = "https://m.dianping.com/i/shop/hx58?from=weixin",
+            newName = "潮汕牛肉火锅",
+            newPlatform = SourcePlatform.DIANPING,
+            existing = listOf(existing),
+            existingCollections = mapOf("e1" to setOf(CollectionType.WANT_TO_TRY))
+        )
+        assertTrue(result is DuplicateCheckResult.Duplicate)
+    }
+
+    @Test
+    fun `duplicate not triggered across platforms with same id`() {
+        val existing = SavedOption(
+            id = "e1", name = "美团潮汕牛肉火锅",
+            optionType = SavedOptionType.RESTAURANT,
+            sourcePlatform = SourcePlatform.MEITUAN,
+            sourceUrl = "https://www.meituan.com/restaurant/456"
+        )
+        val result = DuplicateDetector.detect(
+            newUrl = "https://www.dianping.com/shop/456",
+            newName = "点评潮汕牛肉火锅",
+            newPlatform = SourcePlatform.DIANPING,
+            existing = listOf(existing),
+            existingCollections = emptyMap()
+        )
+        assertTrue(result is DuplicateCheckResult.NoDuplicate)
+    }
+
+    // ── Stage 5 增强：名称规范化相似匹配 ──
+
+    @Test
+    fun `duplicate detected by normalized name ignoring whitespace and punctuation`() {
+        val existing = SavedOption(
+            id = "e1", name = "潮汕牛肉火锅",
+            optionType = SavedOptionType.RESTAURANT
+        )
+        val result = DuplicateDetector.detect(
+            newUrl = null,
+            newName = "潮汕 牛肉火锅",
+            newPlatform = null,
+            existing = listOf(existing),
+            existingCollections = mapOf("e1" to setOf(CollectionType.WANT_TO_TRY))
+        )
+        assertTrue(result is DuplicateCheckResult.Duplicate)
+    }
+
+    // ── Stage 5 增强：名称提取 ──
+
+    @Test
+    fun `name extracted from text after url`() {
+        val draft = ShareTextParser.createDraft(
+            rawText = "https://www.meituan.com/restaurant/123\n潮汕牛肉火锅（这家店超好吃）",
+            subject = null,
+            sourcePackage = null
+        )
+        assertEquals("潮汕牛肉火锅（这家店超好吃）", draft.detectedName)
+        assertFalse(draft.needsReview)
+    }
+
+    @Test
+    fun `name stripped of platform suffix`() {
+        val draft = ShareTextParser.createDraft(
+            rawText = "潮汕牛肉火锅 - 大众点评\nhttps://www.dianping.com/shop/hx58",
+            subject = null,
+            sourcePackage = "com.dianping.v1"
+        )
+        assertEquals("潮汕牛肉火锅", draft.detectedName)
+    }
+
+    // ── Stage 5 增强：外卖类型默认值 ──
+
+    @Test
+    fun `default type takeout when text contains delivery keyword`() {
+        assertEquals(
+            SavedOptionType.TAKEOUT_STORE,
+            ShareImportDefaults.defaultType(SourcePlatform.MEITUAN, "这家店可以外卖 https://www.meituan.com/r/1")
+        )
+        assertEquals(
+            SavedOptionType.TAKEOUT_STORE,
+            ShareImportDefaults.defaultType(SourcePlatform.DIANPING, "支持配送")
+        )
+    }
+
+    @Test
+    fun `default type restaurant when no delivery keyword`() {
+        assertEquals(
+            SavedOptionType.RESTAURANT,
+            ShareImportDefaults.defaultType(SourcePlatform.MEITUAN, "这家店不错 https://www.meituan.com/r/1")
+        )
     }
 }

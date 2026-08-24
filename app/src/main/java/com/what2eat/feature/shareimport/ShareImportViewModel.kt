@@ -59,7 +59,7 @@ class ShareImportViewModel @Inject constructor(
         if (initialized) return
         initialized = true
         val draft = ShareTextParser.createDraft(rawText, subject, sourcePackage)
-        val defaultType = ShareImportDefaults.defaultType(draft.detectedPlatform)
+        val defaultType = ShareImportDefaults.defaultType(draft.detectedPlatform, draft.rawText)
         val defaultCols = ShareImportDefaults.defaultCollections(draft.detectedPlatform)
         _uiState.value = _uiState.value.copy(
             draft = draft,
@@ -129,6 +129,7 @@ class ShareImportViewModel @Inject constructor(
                 val result = DuplicateDetector.detect(
                     newUrl = s.sourceUrl.trim().takeIf { it.isNotBlank() },
                     newName = s.name,
+                    newPlatform = draft.detectedPlatform,
                     existing = existing,
                     existingCollections = cols
                 )
