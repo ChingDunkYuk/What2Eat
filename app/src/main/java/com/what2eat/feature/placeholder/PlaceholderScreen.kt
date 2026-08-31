@@ -38,7 +38,7 @@ fun PlaceholderScreen(
             imageVector = Icons.Outlined.Schedule,
             contentDescription = null,
             modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.outline
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
         )
 
         Text(

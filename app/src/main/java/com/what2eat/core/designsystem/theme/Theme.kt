@@ -37,7 +37,21 @@ private val LightColorScheme = lightColorScheme(
     onError = on_error_light,
     errorContainer = error_container_light,
     onErrorContainer = on_error_container_light,
-    outline = outline_light
+    outline = outline_light,
+    // 以下槽位必须显式传入，否则回落 Material3 紫色默认值（紫色泄漏）
+    outlineVariant = outline_variant_light,
+    scrim = scrim_light,
+    surfaceTint = surface_tint_light,
+    inverseSurface = inverse_surface_light,
+    inverseOnSurface = inverse_on_surface_light,
+    inversePrimary = inverse_primary_light,
+    surfaceDim = surface_dim_light,
+    surfaceBright = surface_bright_light,
+    surfaceContainerLowest = surface_container_lowest_light,
+    surfaceContainerLow = surface_container_low_light,
+    surfaceContainer = surface_container_light,
+    surfaceContainerHigh = surface_container_high_light,
+    surfaceContainerHighest = surface_container_highest_light
 )
 
 private val DarkColorScheme = darkColorScheme(
@@ -63,18 +77,33 @@ private val DarkColorScheme = darkColorScheme(
     onError = on_error_dark,
     errorContainer = error_container_dark,
     onErrorContainer = on_error_container_dark,
-    outline = outline_dark
+    outline = outline_dark,
+    // 以下槽位必须显式传入，否则回落 Material3 紫色默认值（紫色泄漏）
+    outlineVariant = outline_variant_dark,
+    scrim = scrim_dark,
+    surfaceTint = surface_tint_dark,
+    inverseSurface = inverse_surface_dark,
+    inverseOnSurface = inverse_on_surface_dark,
+    inversePrimary = inverse_primary_dark,
+    surfaceDim = surface_dim_dark,
+    surfaceBright = surface_bright_dark,
+    surfaceContainerLowest = surface_container_lowest_dark,
+    surfaceContainerLow = surface_container_low_dark,
+    surfaceContainer = surface_container_dark,
+    surfaceContainerHigh = surface_container_high_dark,
+    surfaceContainerHighest = surface_container_highest_dark
 )
 
 /**
- * What2Eat 主题。
+ * What2Eat 主题 —— 「奶油橘 + 米白」品牌色。
  *
- * 支持浅色 / 深色 / 动态取色（Android 12+）。
+ * 默认使用品牌色板（dynamicColor = false），保证全设备一致的温馨视觉；
+ * dynamicColor 参数保留，未来可作为设置项开关启用动态取色。
  */
 @Composable
 fun What2EatTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -97,6 +126,7 @@ fun What2EatTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = What2EatTypography,
+        shapes = What2EatShapes,
         content = content
     )
 }

@@ -201,7 +201,7 @@ private fun EmptyState(tab: PoolTab, isSearching: Boolean) {
             imageVector = Icons.Outlined.RestaurantMenu,
             contentDescription = null,
             modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.outline
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(

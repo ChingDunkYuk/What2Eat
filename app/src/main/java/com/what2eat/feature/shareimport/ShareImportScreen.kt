@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -91,7 +91,7 @@ fun ShareImportScreen(
                 title = { Text("导入到吃饭池") },
                 navigationIcon = {
                     IconButton(onClick = onCancel) {
-                        Icon(Icons.Outlined.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                     }
                 }
             )
@@ -251,7 +251,7 @@ private fun UnsupportedScreen(onCancel: () -> Unit) {
                 title = { Text("导入到吃饭池") },
                 navigationIcon = {
                     IconButton(onClick = onCancel) {
-                        Icon(Icons.Outlined.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
                     }
                 }
             )

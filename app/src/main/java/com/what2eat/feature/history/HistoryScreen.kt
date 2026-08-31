@@ -107,7 +107,7 @@ fun HistoryScreen(
                             modifier = Modifier
                                 .size(64.dp)
                                 .padding(top = 24.dp),
-                            tint = MaterialTheme.colorScheme.outline
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
                         )
                         Text(
                             text = stringResource(R.string.history_empty),
