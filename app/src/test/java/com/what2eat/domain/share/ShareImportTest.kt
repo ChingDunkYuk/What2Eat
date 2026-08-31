@@ -267,8 +267,74 @@ class ShareImportTest {
             subject = null,
             sourcePackage = null
         )
-        assertEquals("潮汕牛肉火锅（这家店超好吃）", draft.detectedName)
+        // 描述性括号（这家店超好吃）被丢弃，只留主店名
+        assertEquals("潮汕牛肉火锅", draft.detectedName)
         assertFalse(draft.needsReview)
+    }
+
+    // ── 店名净化：真实分享模板提取主店名 ──
+
+    @Test
+    fun `dianping template name from bracket`() {
+        val draft = ShareTextParser.createDraft(
+            rawText = "我在大众点评发现了一家不错的店【小肥羊(望京店)】，快来看看吧 https://m.dianping.com/shop/x1",
+            subject = null,
+            sourcePackage = "com.dianping.v1"
+        )
+        assertEquals("小肥羊(望京店)", draft.detectedName)
+    }
+
+    @Test
+    fun `meituan template name cut at rating and sales`() {
+        val draft = ShareTextParser.createDraft(
+            rawText = "【美团】小龙坎火锅(合生汇店) 4.8分 月售2000+ 距离你880m，快去买单吧 https://tb.htuiot.com/x",
+            subject = null,
+            sourcePackage = "com.sankuai.meituan"
+        )
+        assertEquals("小龙坎火锅(合生汇店)", draft.detectedName)
+    }
+
+    @Test
+    fun `subject is cleaned too`() {
+        val draft = ShareTextParser.createDraft(
+            rawText = "https://m.dianping.com/shop/x2",
+            subject = "我在大众点评发现了一家不错的店【海底捞(西单店)】，快来看看吧",
+            sourcePackage = "com.dianping.v1"
+        )
+        assertEquals("海底捞(西单店)", draft.detectedName)
+    }
+
+    @Test
+    fun `branch name in parentheses is kept`() {
+        val draft = ShareTextParser.createDraft(
+            rawText = "海底捞火锅（西单大悦城店） https://m.dianping.com/shop/x3",
+            subject = null,
+            sourcePackage = "com.dianping.v1"
+        )
+        assertEquals("海底捞火锅（西单大悦城店）", draft.detectedName)
+    }
+
+    @Test
+    fun `long marketing sentence is truncated to 30 chars`() {
+        val draft = ShareTextParser.createDraft(
+            rawText = "这家藏在胡同深处的宝藏小店真的太好吃了我每次去都要排队两个小时才吃得上 https://m.dianping.com/shop/x4",
+            subject = null,
+            sourcePackage = "com.dianping.v1"
+        )
+        val name = draft.detectedName!!
+        assertTrue("长度应不超过30: ${name.length}", name.length <= 30)
+        // 应在标点/营销词处断句，而非整句照抄
+        assertFalse(name.contains("才吃得上"))
+    }
+
+    @Test
+    fun `extraction result never exceeds 30 chars`() {
+        val draft = ShareTextParser.createDraft(
+            rawText = "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十 https://m.dianping.com/shop/x5",
+            subject = null,
+            sourcePackage = null
+        )
+        assertTrue(draft.detectedName!!.length <= 30)
     }
 
     @Test
