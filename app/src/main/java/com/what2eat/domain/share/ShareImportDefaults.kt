@@ -50,4 +50,22 @@ object ShareImportDefaults {
         SourcePlatform.BROWSER -> setOf(CollectionType.WANT_TO_TRY)
         else -> emptySet()
     }
+
+    /**
+     * 收件箱兜底名称：名称解析不出来时用作占位，之后在「待整理」里改名。
+     */
+    fun fallbackName(platform: SourcePlatform): String = when (platform) {
+        SourcePlatform.DIANPING,
+        SourcePlatform.MEITUAN,
+        SourcePlatform.AMAP,
+        SourcePlatform.BAIDU_MAP,
+        SourcePlatform.BROWSER -> "来自${platform.label}的分享"
+        else -> "待整理的分享"
+    }
+
+    /**
+     * 收件箱兜底类型：永不返回 null，保证「一键收进待整理」无需用户当场选类型。
+     */
+    fun inboxType(platform: SourcePlatform, rawText: String?): SavedOptionType =
+        defaultType(platform, rawText) ?: SavedOptionType.RESTAURANT
 }

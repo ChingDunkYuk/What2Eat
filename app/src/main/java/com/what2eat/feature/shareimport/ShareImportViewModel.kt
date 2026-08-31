@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.what2eat.domain.foodpool.FoodOptionForm
 import com.what2eat.domain.model.CollectionType
+import com.what2eat.domain.model.ImportStatus
 import com.what2eat.domain.model.SavedOptionType
 import com.what2eat.domain.model.SourcePlatform
 import com.what2eat.domain.repository.SavedOptionRepository
@@ -36,7 +37,8 @@ data class ShareImportFormState(
     val saved: Boolean = false,
     val unsupported: Boolean = false
 ) {
-    val canSave: Boolean get() = name.isNotBlank() && type != null
+    /** 收件箱模式：解析出草稿即可保存，名称/类型允许留空（自动兜底） */
+    val canSave: Boolean get() = draft != null
 }
 
 @HiltViewModel
@@ -66,9 +68,8 @@ class ShareImportViewModel @Inject constructor(
             name = draft.detectedName ?: "",
             type = defaultType,
             collections = defaultCols,
-            sourceUrl = draft.detectedUrl ?: "",
-            // 来源平台对应的默认类型一定可确定；若纯文字则 type=null 要求用户确认
-            nameError = if (draft.needsReview && defaultType == null) "请补充名称" else null
+            sourceUrl = draft.detectedUrl ?: ""
+            // 收件箱模式：名称解析不出也不阻塞，保存时用兜底名称占位
         )
     }
 
@@ -105,20 +106,20 @@ class ShareImportViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(duplicate = null)
     }
 
-    /** 保存并复用 Stage 4 的 SavedOptionRepository。 */
+    /**
+     * 收件箱保存：保存到「待整理」（NEEDS_REVIEW），之后在吃饭池整理。
+     * 名称/类型留空时自动兜底，不阻塞分享收件；整理时再确认信息并转 COMPLETE。
+     */
     fun save(stillSaveDuplicate: Boolean = false) {
         val s = _uiState.value
         val draft = s.draft ?: return
-        val type = s.type ?: run {
-            _uiState.value = s.copy(nameError = "请选择类型")
+        // 兜底：名称解析不出 → 平台占位名；类型未选 → 按平台/文本推断
+        val name = s.name.trim().ifEmpty { ShareImportDefaults.fallbackName(draft.detectedPlatform) }
+        if (!FoodOptionForm.isValidName(name)) {
+            _uiState.value = s.copy(nameError = "名称最长 50 字")
             return
         }
-        if (!FoodOptionForm.isValidName(s.name)) {
-            _uiState.value = s.copy(
-                nameError = if (s.name.isBlank()) "名称不能为空" else "名称最长 50 字"
-            )
-            return
-        }
+        val type = s.type ?: ShareImportDefaults.inboxType(draft.detectedPlatform, draft.rawText)
         viewModelScope.launch {
             // 重复检测（仅非"仍然保存"时）
             if (!stillSaveDuplicate) {
@@ -128,7 +129,7 @@ class ShareImportViewModel @Inject constructor(
                     .mapValues { it.value.toSet() }
                 val result = DuplicateDetector.detect(
                     newUrl = s.sourceUrl.trim().takeIf { it.isNotBlank() },
-                    newName = s.name,
+                    newName = name,
                     newPlatform = draft.detectedPlatform,
                     existing = existing,
                     existingCollections = cols
@@ -141,7 +142,7 @@ class ShareImportViewModel @Inject constructor(
 
             val option = FoodOptionForm.buildOption(
                 existing = null,
-                name = s.name,
+                name = name,
                 type = type,
                 areaText = s.areaText,
                 priceLevel = null,
@@ -153,12 +154,14 @@ class ShareImportViewModel @Inject constructor(
             ).copy(
                 // 覆盖来源字段
                 sourcePlatform = draft.detectedPlatform,
-                sourcePackage = draft.sourcePackage
+                sourcePackage = draft.sourcePackage,
+                // 收件箱：分享进来一律先进「待整理」，编辑保存后自动转 COMPLETE
+                importStatus = ImportStatus.NEEDS_REVIEW
             )
             repository.upsert(option)
             repository.setCollections(option.id, s.collections)
             repository.setTags(option.id, s.tags.filter { it.isNotBlank() }.toSet())
-            _uiState.value = s.copy(isSaving = true, saved = true, savedOptionId = option.id)
+            _uiState.value = s.copy(name = name, isSaving = true, saved = true, savedOptionId = option.id)
         }
     }
 }

@@ -1,9 +1,12 @@
 package com.what2eat.domain.share
 
 import com.what2eat.domain.model.CollectionType
+import com.what2eat.domain.model.ImportStatus
 import com.what2eat.domain.model.SavedOption
 import com.what2eat.domain.model.SavedOptionType
 import com.what2eat.domain.model.SourcePlatform
+import com.what2eat.domain.foodpool.FoodOptionForm
+import com.what2eat.domain.foodpool.FoodPoolFilter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -298,5 +301,83 @@ class ShareImportTest {
             SavedOptionType.RESTAURANT,
             ShareImportDefaults.defaultType(SourcePlatform.MEITUAN, "这家店不错 https://www.meituan.com/r/1")
         )
+    }
+
+    // ── 收件箱模式：兜底名称/类型 ──
+
+    @Test
+    fun `fallback name uses platform label for meituan and dianping`() {
+        assertEquals("来自美团的分享", ShareImportDefaults.fallbackName(SourcePlatform.MEITUAN))
+        assertEquals("来自大众点评的分享", ShareImportDefaults.fallbackName(SourcePlatform.DIANPING))
+        assertEquals("来自高德地图的分享", ShareImportDefaults.fallbackName(SourcePlatform.AMAP))
+    }
+
+    @Test
+    fun `fallback name for unknown platform is generic`() {
+        assertEquals("待整理的分享", ShareImportDefaults.fallbackName(SourcePlatform.OTHER))
+        assertEquals("待整理的分享", ShareImportDefaults.fallbackName(SourcePlatform.NONE))
+    }
+
+    @Test
+    fun `inbox type never null even for plain text`() {
+        assertEquals(
+            SavedOptionType.RESTAURANT,
+            ShareImportDefaults.inboxType(SourcePlatform.OTHER, null)
+        )
+        assertEquals(
+            SavedOptionType.TAKEOUT_STORE,
+            ShareImportDefaults.inboxType(SourcePlatform.MEITUAN, "这家可以外卖配送")
+        )
+    }
+
+    // ── 收件箱模式：分享进来一律先进待整理，整理保存后转正式 ──
+
+    @Test
+    fun `inbox item saved as needs review then completed after organize`() {
+        // 1) 收件：分享保存 → NEEDS_REVIEW（ShareImportViewModel 语义，此处验证表单构建链路）
+        val draft = ShareTextParser.createDraft(
+            rawText = "https://www.dianping.com/shop/hx58",
+            subject = null,
+            sourcePackage = "com.dianping.v1"
+        )
+        assertEquals(ImportStatus.NEEDS_REVIEW, draft.importStatus)
+
+        val inbox = FoodOptionForm.buildOption(
+            existing = null,
+            name = draft.detectedName ?: ShareImportDefaults.fallbackName(draft.detectedPlatform),
+            type = ShareImportDefaults.inboxType(draft.detectedPlatform, draft.rawText),
+            areaText = null,
+            priceLevel = null,
+            estimatedMinutes = null,
+            notes = null,
+            sourceUrl = draft.detectedUrl,
+            enabled = true,
+            markCompleted = false
+        ).copy(
+            sourcePlatform = draft.detectedPlatform,
+            sourcePackage = draft.sourcePackage,
+            importStatus = ImportStatus.NEEDS_REVIEW
+        )
+        assertEquals(ImportStatus.NEEDS_REVIEW, inbox.importStatus)
+        assertEquals("来自大众点评的分享", inbox.name)
+
+        // 2) 整理：编辑保存（markCompleted=true）→ COMPLETE，移出待整理
+        val organized = FoodOptionForm.buildOption(
+            existing = inbox,
+            name = "潮汕牛肉火锅",
+            type = SavedOptionType.RESTAURANT,
+            areaText = null,
+            priceLevel = null,
+            estimatedMinutes = null,
+            notes = null,
+            sourceUrl = inbox.sourceUrl,
+            enabled = true,
+            markCompleted = true
+        )
+        assertEquals(ImportStatus.COMPLETE, organized.importStatus)
+        assertEquals("潮汕牛肉火锅", organized.name)
+        // 待整理 Tab 过滤：整理前命中，整理后不再命中
+        assertTrue(FoodPoolFilter.matchesTab(inbox, emptySet(), "NEEDS_REVIEW"))
+        assertFalse(FoodPoolFilter.matchesTab(organized, emptySet(), "NEEDS_REVIEW"))
     }
 }

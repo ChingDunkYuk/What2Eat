@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -38,17 +39,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.what2eat.core.designsystem.icon.What2EatIcons
 import com.what2eat.domain.model.CollectionType
 import com.what2eat.domain.model.SavedOptionType
 import com.what2eat.domain.share.DuplicateCheckResult
+import com.what2eat.domain.share.ShareImportDefaults
 
 /**
- * 分享导入确认页。
- * 展示解析结果 → 用户确认/补充 → 保存到吃饭池。
- * 保存后显示成功页（查看详情 / 完成）。
+ * 分享收件确认页（收件箱模式）。
+ *
+ * 从美团/大众点评等分享进来的内容，一键收进吃饭池的「待整理」：
+ * 名称/类型能解析就自动填，解析不出也不阻塞（用占位名兜底）。
+ * 之后再进入吃饭池的「待整理」里慢慢整理，整理保存后自动归入正式池。
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -84,11 +91,12 @@ fun ShareImportScreen(
     }
 
     val draft = state.draft!!
+    val fallbackName = ShareImportDefaults.fallbackName(draft.detectedPlatform)
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("导入到吃饭池") },
+                title = { Text("收到一条分享") },
                 navigationIcon = {
                     IconButton(onClick = onCancel) {
                         What2EatBackIcon(contentDescription = "返回")
@@ -112,8 +120,8 @@ fun ShareImportScreen(
                     Button(
                         onClick = { viewModel.save() },
                         enabled = state.canSave && !state.isSaving,
-                        modifier = Modifier.weight(1f)
-                    ) { Text("保存到吃饭池") }
+                        modifier = Modifier.weight(1.4f)
+                    ) { Text("收进待整理") }
                 }
             }
         }
@@ -127,23 +135,30 @@ fun ShareImportScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 来源
-            Text("来源：", style = MaterialTheme.typography.titleSmall)
-            Text(draft.detectedPlatform.label, style = MaterialTheme.typography.bodyLarge)
+            // 收件提示
+            Text(
+                "来自${draft.detectedPlatform.label}的内容已解析，先收进「待整理」，稍后再整理",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
-            // 名称
+            // 名称（可留空，自动兜底占位名）
             OutlinedTextField(
                 value = state.name,
                 onValueChange = viewModel::onNameChange,
-                label = { Text("名称 *") },
+                label = { Text("名称（可稍后改）") },
+                placeholder = { Text(fallbackName) },
                 isError = state.nameError != null,
-                supportingText = state.nameError?.let { { Text(it) } },
+                supportingText = state.nameError?.let { { Text(it) } }
+                    ?: if (state.name.isBlank()) {
+                        { Text("未识别到店名，将使用「$fallbackName」") }
+                    } else null,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // 类型
-            Text("类型 *", style = MaterialTheme.typography.titleSmall)
+            // 类型（可留空，默认按来源推断）
+            Text("类型（可稍后改）", style = MaterialTheme.typography.titleSmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // 仅餐厅/外卖/在家做（导入场景）
                 listOf(
@@ -248,7 +263,7 @@ private fun UnsupportedScreen(onCancel: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("导入到吃饭池") },
+                title = { Text("收到一条分享") },
                 navigationIcon = {
                     IconButton(onClick = onCancel) {
                         What2EatBackIcon(contentDescription = "返回")
@@ -271,7 +286,7 @@ private fun UnsupportedScreen(onCancel: () -> Unit) {
     }
 }
 
-/** 保存成功页。 */
+/** 收件成功页：吉祥物 + 去整理入口。 */
 @Composable
 private fun ShareImportSuccessScreen(
     name: String,
@@ -284,15 +299,25 @@ private fun ShareImportSuccessScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(modifier = Modifier.height(24.dp))
-            Text("已添加到吃饭池", style = MaterialTheme.typography.headlineSmall)
-            Text("「$name」已保存。", style = MaterialTheme.typography.bodyLarge)
-            Spacer(modifier = Modifier.height(16.dp))
+            Icon(
+                imageVector = What2EatIcons.Mascot,
+                contentDescription = null,
+                tint = Color.Unspecified,
+                modifier = Modifier.size(96.dp)
+            )
+            Text("已收进待整理", style = MaterialTheme.typography.headlineSmall)
+            Text(
+                "「$name」先放在吃饭池的待整理里，\n有空时整理一下就能用啦。",
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = onViewDetail, modifier = Modifier.fillMaxWidth()) {
-                Text("查看详情")
+                Text("去整理")
             }
             OutlinedButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
                 Text("完成")

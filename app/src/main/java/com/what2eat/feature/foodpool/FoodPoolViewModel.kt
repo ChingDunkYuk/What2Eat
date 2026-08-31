@@ -3,6 +3,7 @@ package com.what2eat.feature.foodpool
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.what2eat.domain.foodpool.FoodPoolFilter
+import com.what2eat.domain.model.ImportStatus
 import com.what2eat.domain.model.SavedOption
 import com.what2eat.domain.repository.SavedOptionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -39,7 +40,9 @@ data class FoodPoolUiState(
     val items: List<SavedOption> = emptyList(),
     val selectedTab: PoolTab = PoolTab.ALL,
     val sort: PoolSort = PoolSort.RECENTLY_ADDED,
-    val query: String = ""
+    val query: String = "",
+    /** 全池「待整理」数量（分享收件后待确认的选项），用于 Tab 角标提醒 */
+    val reviewCount: Int = 0
 )
 
 @HiltViewModel
@@ -116,7 +119,8 @@ class FoodPoolViewModel @Inject constructor(
                     items = filtered,
                     selectedTab = tab,
                     sort = sort,
-                    query = query
+                    query = query,
+                    reviewCount = options.count { it.importStatus == ImportStatus.NEEDS_REVIEW }
                 )
             }.collect { state ->
                 _uiState.value = state
