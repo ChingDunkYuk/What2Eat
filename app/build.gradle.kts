@@ -14,8 +14,8 @@ android {
         applicationId = "com.what2eat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 9
-        versionName = "0.7.2"
+        versionCode = 11
+        versionName = "0.7.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -67,7 +67,6 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended")
 
     // Core
     implementation("androidx.core:core-ktx:1.13.1")

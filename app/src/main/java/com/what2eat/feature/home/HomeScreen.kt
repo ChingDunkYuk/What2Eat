@@ -1,5 +1,7 @@
 package com.what2eat.feature.home
 
+import com.what2eat.core.designsystem.icon.What2EatIcons
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,11 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Category
-import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Restaurant
-import androidx.compose.material.icons.outlined.WavingHand
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -27,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -68,10 +66,10 @@ fun HomeScreen(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Icon(
-                imageVector = Icons.Outlined.WavingHand,
+                imageVector = What2EatIcons.Mascot,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(28.dp)
+                tint = Color.Unspecified,
+                modifier = Modifier.size(40.dp)
             )
             Text(
                 text = greeting,
@@ -97,7 +95,7 @@ fun HomeScreen(
                 "你有一个未完成的选择"
             }
             EntryCard(
-                icon = Icons.Outlined.PlayArrow,
+                icon = What2EatIcons.PlayArrow,
                 title = "继续本次决定",
                 description = candidateDesc,
                 onClick = onContinueSessionClick,
@@ -108,14 +106,14 @@ fun HomeScreen(
 
         // ── 主入口卡片 ──
         EntryCard(
-            icon = Icons.Outlined.Category,
+            icon = What2EatIcons.Category,
             title = stringResource(R.string.home_entry_decide_first),
             description = stringResource(R.string.home_entry_decide_first_desc),
             onClick = onDecideFirstClick
         )
 
         EntryCard(
-            icon = Icons.Outlined.Restaurant,
+            icon = What2EatIcons.Restaurant,
             title = stringResource(R.string.home_entry_pool),
             description = stringResource(R.string.home_entry_pool_desc),
             onClick = onPoolDecideClick,

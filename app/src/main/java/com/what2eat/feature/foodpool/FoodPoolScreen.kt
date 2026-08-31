@@ -1,5 +1,7 @@
 package com.what2eat.feature.foodpool
 
+import com.what2eat.core.designsystem.icon.What2EatIcons
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,11 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Clear
-import androidx.compose.material.icons.outlined.RestaurantMenu
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -62,7 +59,7 @@ fun FoodPoolScreen(
         },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddClick) {
-                Icon(Icons.Outlined.Add, contentDescription = "添加")
+                Icon(What2EatIcons.Add, contentDescription = "添加")
             }
         }
     ) { innerPadding ->
@@ -76,11 +73,11 @@ fun FoodPoolScreen(
                 value = uiState.query,
                 onValueChange = viewModel::onQueryChange,
                 placeholder = { Text("搜索名称、区域、标签") },
-                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                leadingIcon = { Icon(What2EatIcons.Search, contentDescription = null) },
                 trailingIcon = {
                     if (uiState.query.isNotEmpty()) {
                         IconButton(onClick = viewModel::clearQuery) {
-                            Icon(Icons.Outlined.Clear, contentDescription = "清除")
+                            Icon(What2EatIcons.Clear, contentDescription = "清除")
                         }
                     }
                 },
@@ -167,7 +164,7 @@ private fun OptionCard(option: SavedOption, onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = Icons.Outlined.RestaurantMenu,
+                imageVector = What2EatIcons.RestaurantMenu,
                 contentDescription = null,
                 modifier = Modifier.size(20.dp),
                 tint = MaterialTheme.colorScheme.primary
@@ -198,7 +195,7 @@ private fun EmptyState(tab: PoolTab, isSearching: Boolean) {
         verticalArrangement = Arrangement.Center
     ) {
         Icon(
-            imageVector = Icons.Outlined.RestaurantMenu,
+            imageVector = What2EatIcons.RestaurantMenu,
             contentDescription = null,
             modifier = Modifier.size(64.dp),
             tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)

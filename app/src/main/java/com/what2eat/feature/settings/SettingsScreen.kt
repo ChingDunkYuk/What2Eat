@@ -1,5 +1,7 @@
 package com.what2eat.feature.settings
 
+import com.what2eat.core.designsystem.icon.What2EatIcons
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,10 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -88,7 +86,7 @@ fun SettingsScreen(
                 verticalArrangement = Arrangement.Center
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.WarningAmber,
+                    imageVector = What2EatIcons.WarningAmber,
                     contentDescription = null,
                     modifier = Modifier.size(48.dp),
                     tint = MaterialTheme.colorScheme.error
@@ -227,7 +225,7 @@ private fun SettingsContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
-            text = stringResource(R.string.settings_version, "0.7.2"),
+            text = stringResource(R.string.settings_version, "0.7.3"),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -237,7 +235,7 @@ private fun SettingsContent(
     if (uiState.needsPrimarySelection && uiState.candidatesForSelection.isNotEmpty()) {
         AlertDialog(
             onDismissRequest = {},
-            icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
+            icon = { Icon(What2EatIcons.WarningAmber, contentDescription = null) },
             title = { Text(stringResource(R.string.settings_repair_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -296,7 +294,7 @@ private fun ProfileCard(
                 )
                 TextButton(onClick = onEditClick) {
                     Icon(
-                        imageVector = Icons.Outlined.Edit,
+                        imageVector = What2EatIcons.Edit,
                         contentDescription = null,
                         modifier = Modifier.padding(end = 4.dp),
                         tint = MaterialTheme.colorScheme.primary
@@ -330,7 +328,7 @@ private fun ProfileCard(
                     )
                 }
                 Icon(
-                    imageVector = Icons.Outlined.ChevronRight,
+                    imageVector = What2EatIcons.ChevronRight,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )

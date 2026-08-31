@@ -3,6 +3,7 @@ package com.what2eat.core.datastore
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -29,9 +30,6 @@ private val Context.usageModeDataStore: DataStore<Preferences> by preferencesDat
 class AppUsageModeDataStore @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    companion object {
-        private val USAGE_MODE_KEY = intPreferencesKey("app_usage_mode")
-    }
 
     val usageModeFlow: Flow<AppUsageMode> = context.usageModeDataStore.data.map { preferences ->
         val ordinal = preferences[USAGE_MODE_KEY] ?: AppUsageMode.SINGLE.ordinal
@@ -41,6 +39,23 @@ class AppUsageModeDataStore @Inject constructor(
     suspend fun setUsageMode(mode: AppUsageMode) {
         context.usageModeDataStore.edit { preferences ->
             preferences[USAGE_MODE_KEY] = mode.ordinal
+        }
+    }
+
+    companion object {
+        private val USAGE_MODE_KEY = intPreferencesKey("app_usage_mode")
+        private val ONBOARDING_COMPLETED_KEY = booleanPreferencesKey("onboarding_completed")
+    }
+
+    /** 是否已完成首次引导（改名页），null-safe 默认 false */
+    val onboardingCompletedFlow: Flow<Boolean> = context.usageModeDataStore.data.map { preferences ->
+        preferences[ONBOARDING_COMPLETED_KEY] ?: false
+    }
+
+    /** 标记首次引导完成 */
+    suspend fun setOnboardingCompleted() {
+        context.usageModeDataStore.edit { preferences ->
+            preferences[ONBOARDING_COMPLETED_KEY] = true
         }
     }
 }

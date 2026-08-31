@@ -1,5 +1,7 @@
 package com.what2eat.feature.history
 
+import com.what2eat.core.designsystem.icon.What2EatIcons
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,10 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Restaurant
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -102,7 +100,7 @@ fun HistoryScreen(
                             color = MaterialTheme.colorScheme.onBackground
                         )
                         Icon(
-                            imageVector = Icons.Outlined.History,
+                            imageVector = What2EatIcons.History,
                             contentDescription = null,
                             modifier = Modifier
                                 .size(64.dp)
@@ -170,7 +168,7 @@ private fun HistoryCard(
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = Icons.Outlined.Restaurant,
+                    imageVector = What2EatIcons.Restaurant,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
                     tint = MaterialTheme.colorScheme.primary
@@ -212,7 +210,7 @@ private fun HistoryCard(
             ) {
                 TextButton(onClick = onSearchAgain) {
                     Icon(
-                        imageVector = Icons.Outlined.Search,
+                        imageVector = What2EatIcons.Search,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
                     )

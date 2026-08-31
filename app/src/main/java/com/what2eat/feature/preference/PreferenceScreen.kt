@@ -1,5 +1,7 @@
 package com.what2eat.feature.preference
 
+import com.what2eat.core.designsystem.icon.What2EatIcons
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,10 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Block
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -65,7 +63,7 @@ fun PreferenceScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            imageVector = Icons.Outlined.Close,
+                            imageVector = What2EatIcons.Close,
                             contentDescription = "返回"
                         )
                     }
@@ -86,11 +84,11 @@ fun PreferenceScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 placeholder = { Text(stringResource(R.string.preference_search_hint)) },
-                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                leadingIcon = { Icon(What2EatIcons.Search, contentDescription = null) },
                 trailingIcon = {
                     if (uiState.searchQuery.isNotEmpty()) {
                         IconButton(onClick = { viewModel.onSearchQueryChange("") }) {
-                            Icon(Icons.Outlined.Close, contentDescription = "清除")
+                            Icon(What2EatIcons.Close, contentDescription = "清除")
                         }
                     }
                 },
@@ -231,7 +229,7 @@ private fun PreferenceItemRow(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.Block,
+                    imageVector = What2EatIcons.Block,
                     contentDescription = null,
                     tint = if (item.isHardExcluded) {
                         MaterialTheme.colorScheme.error
@@ -258,36 +256,19 @@ private fun PreferenceItemRow(
             }
         }
 
-        // 硬排除时禁用偏好选择
-        val preferenceLabels = listOf(
-            stringResource(R.string.pref_level_dislike2),  // -2 非常不喜欢
-            stringResource(R.string.pref_level_dislike1),  // -1 不太喜欢
-            stringResource(R.string.pref_level_neutral),   //  0 无所谓
-            stringResource(R.string.pref_level_like1),     //  1 喜欢
-            stringResource(R.string.pref_level_like2)      //  2 非常喜欢
-        )
-
+        // 硬排除时禁用偏好选择（心情脸小表情：大哭 → 眯眼大笑）
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                .padding(top = 6.dp)
         ) {
-            preferenceLabels.forEachIndexed { index, label ->
-                val level = index - 2 // -2 to 2
-                val isSelected = item.preferenceLevel == level && !item.isHardExcluded
-
-                FilterChip(
-                    selected = isSelected,
-                    onClick = {
-                        if (!item.isHardExcluded) {
-                            viewModel.setPreferenceLevel(item.category.id, level)
-                        }
-                    },
-                    label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-                    enabled = !item.isHardExcluded
-                )
-            }
+            MoodFaceSelector(
+                selectedLevel = item.preferenceLevel,
+                enabled = !item.isHardExcluded,
+                onLevelChange = { level ->
+                    viewModel.setPreferenceLevel(item.category.id, level)
+                }
+            )
         }
 
         // 硬排除时显示提示

@@ -16,6 +16,9 @@
     <string name="home_entry_pool">从我的吃饭池决定</string>
     <string name="home_entry_pool_desc">从收藏的餐厅和选项中选一个</string>
 
+    <!-- Onboarding -->
+    <string name="onboarding_name_label">你的名字</string>
+
     <!-- Placeholder -->
     <string name="placeholder_title">即将推出</string>
     <string name="placeholder_desc">此功能将在后续版本中开发</string>

@@ -1,10 +1,7 @@
 package com.what2eat.core.navigation
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Restaurant
-import androidx.compose.material.icons.outlined.Settings
+import com.what2eat.core.designsystem.icon.What2EatIcons
+
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
@@ -18,25 +15,25 @@ sealed class BottomNavDestination(
     object Home : BottomNavDestination(
         route = "home",
         labelResId = com.what2eat.R.string.nav_home,
-        icon = Icons.Outlined.Home
+        icon = What2EatIcons.Home
     )
 
     object FoodPool : BottomNavDestination(
         route = "food_pool",
         labelResId = com.what2eat.R.string.nav_food_pool,
-        icon = Icons.Outlined.Restaurant
+        icon = What2EatIcons.Restaurant
     )
 
     object History : BottomNavDestination(
         route = "history",
         labelResId = com.what2eat.R.string.nav_history,
-        icon = Icons.Outlined.History
+        icon = What2EatIcons.History
     )
 
     object Settings : BottomNavDestination(
         route = "settings",
         labelResId = com.what2eat.R.string.nav_settings,
-        icon = Icons.Outlined.Settings
+        icon = What2EatIcons.Settings
     )
 }
 

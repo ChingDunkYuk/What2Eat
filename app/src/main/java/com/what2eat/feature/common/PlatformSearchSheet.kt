@@ -1,5 +1,7 @@
 package com.what2eat.feature.common
 
+import com.what2eat.core.designsystem.icon.What2EatIcons
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,11 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Map
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -93,12 +90,12 @@ fun PlatformSearchSheet(
             // 平台快捷入口（大众点评 / 美团）
             PlatformButton(
                 label = "大众点评",
-                icon = Icons.Outlined.Search,
+                icon = What2EatIcons.Search,
                 onClick = { onPlatformSearch(SearchPlatform.DIANPING) }
             )
             PlatformButton(
                 label = "美团",
-                icon = Icons.Outlined.Search,
+                icon = What2EatIcons.Search,
                 onClick = { onPlatformSearch(SearchPlatform.MEITUAN) }
             )
 
@@ -107,12 +104,12 @@ fun PlatformSearchSheet(
             // 通用搜索
             PlatformButton(
                 label = "地图搜索",
-                icon = Icons.Outlined.Map,
+                icon = What2EatIcons.Map,
                 onClick = { onPlatformSearch(SearchPlatform.MAP) }
             )
             PlatformButton(
                 label = "浏览器搜索",
-                icon = Icons.Outlined.Language,
+                icon = What2EatIcons.Language,
                 onClick = { onPlatformSearch(SearchPlatform.BROWSER) }
             )
 
@@ -123,7 +120,7 @@ fun PlatformSearchSheet(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.ContentCopy,
+                    imageVector = What2EatIcons.ContentCopy,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp)
                 )

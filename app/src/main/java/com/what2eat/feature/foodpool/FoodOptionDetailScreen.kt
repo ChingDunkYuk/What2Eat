@@ -1,5 +1,7 @@
 package com.what2eat.feature.foodpool
 
+import com.what2eat.core.designsystem.icon.What2EatBackIcon
+
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
@@ -14,8 +16,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -83,7 +83,7 @@ fun FoodOptionDetailScreen(
                 title = { Text("吃饭选项详情") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
+                        What2EatBackIcon(contentDescription = "返回")
                     }
                 }
             )

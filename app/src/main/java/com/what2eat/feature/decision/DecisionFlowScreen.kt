@@ -1,5 +1,8 @@
 package com.what2eat.feature.decision
 
+import com.what2eat.core.designsystem.icon.What2EatBackIcon
+import com.what2eat.core.designsystem.icon.What2EatIcons
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,18 +25,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Block
-import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Handshake
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Map
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -139,7 +130,7 @@ fun DecisionFlowScreen(
                             DecisionStep.COMPLETED -> onExit()
                         }
                     }) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
+                        What2EatBackIcon(contentDescription = "返回")
                     }
                 }
             )
@@ -208,7 +199,7 @@ fun DecisionFlowScreen(
     if (uiState.showDiscardDialog) {
         AlertDialog(
             onDismissRequest = { viewModel.hideDiscardDialog() },
-            icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
+            icon = { Icon(What2EatIcons.WarningAmber, contentDescription = null) },
             title = { Text("保存草稿？") },
             text = { Text("你已修改了本次条件。是否保存草稿以便下次继续？") },
             confirmButton = {
@@ -234,7 +225,7 @@ fun DecisionFlowScreen(
     if (uiState.showExitDialog) {
         AlertDialog(
             onDismissRequest = { viewModel.hideExitDialog() },
-            icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
+            icon = { Icon(What2EatIcons.WarningAmber, contentDescription = null) },
             title = { Text("退出决策流程") },
             text = { Text("你有一个进行中的决策流程，是否继续？") },
             confirmButton = {
@@ -259,7 +250,7 @@ fun DecisionFlowScreen(
             "放弃后本次决策的所有数据将被删除，无法恢复。确定要放弃吗？"
         AlertDialog(
             onDismissRequest = { viewModel.hideCancelDialog() },
-            icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
+            icon = { Icon(What2EatIcons.WarningAmber, contentDescription = null) },
             title = { Text(title) },
             text = { Text(text) },
             confirmButton = {
@@ -282,7 +273,7 @@ fun DecisionFlowScreen(
     if (uiState.showNewSessionDialog) {
         AlertDialog(
             onDismissRequest = { viewModel.cancelNewSession() },
-            icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
+            icon = { Icon(What2EatIcons.WarningAmber, contentDescription = null) },
             title = { Text("已有未完成的决策") },
             text = { Text("你有一个进行中的决策流程。要继续现有决定，还是放弃并重新开始？") },
             confirmButton = {
@@ -325,7 +316,7 @@ private fun ErrorStateView(
         verticalArrangement = Arrangement.Center
     ) {
         Icon(
-            imageVector = Icons.Outlined.WarningAmber,
+            imageVector = What2EatIcons.WarningAmber,
             contentDescription = null,
             modifier = Modifier.size(64.dp),
             tint = MaterialTheme.colorScheme.error
@@ -412,7 +403,7 @@ private fun ConditionsStep(
                         }
                         if (selected) {
                             Icon(
-                                Icons.Outlined.Check,
+                                What2EatIcons.Check,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary
                             )
@@ -485,7 +476,7 @@ private fun ConditionsStep(
                 ) {
                     Text(level.label, style = MaterialTheme.typography.bodyLarge)
                     if (selected) {
-                        Icon(Icons.Outlined.Check, contentDescription = null,
+                        Icon(What2EatIcons.Check, contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary)
                     }
                 }
@@ -517,7 +508,7 @@ private fun ConditionsStep(
                 ) {
                     Text(level.label, style = MaterialTheme.typography.bodyLarge)
                     if (selected) {
-                        Icon(Icons.Outlined.Check, contentDescription = null,
+                        Icon(What2EatIcons.Check, contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary)
                     }
                 }
@@ -575,7 +566,7 @@ private fun HandoffStep(
         verticalArrangement = Arrangement.Center
     ) {
         Icon(
-            imageVector = Icons.Outlined.Handshake,
+            imageVector = What2EatIcons.Handshake,
             contentDescription = null,
             modifier = Modifier.size(64.dp),
             tint = MaterialTheme.colorScheme.primary
@@ -654,11 +645,11 @@ private fun CategorySelectStep(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp),
             placeholder = { Text("搜索分类") },
-            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+            leadingIcon = { Icon(What2EatIcons.Search, contentDescription = null) },
             trailingIcon = {
                 if (uiState.searchQuery.isNotEmpty()) {
                     IconButton(onClick = { viewModel.clearSearch() }) {
-                        Icon(Icons.Outlined.Close, contentDescription = "清除搜索")
+                        Icon(What2EatIcons.Close, contentDescription = "清除搜索")
                     }
                 }
             },
@@ -690,7 +681,7 @@ private fun CategorySelectStep(
                 verticalArrangement = Arrangement.Center
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.Search,
+                    imageVector = What2EatIcons.Search,
                     contentDescription = null,
                     modifier = Modifier.size(48.dp),
                     tint = MaterialTheme.colorScheme.outline
@@ -797,7 +788,7 @@ private fun CategoryGroupCard(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Icon(
-                                    Icons.Outlined.Block,
+                                    What2EatIcons.Block,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.error,
                                     modifier = Modifier.size(16.dp)
@@ -907,7 +898,7 @@ private fun ResultsStep(
                 verticalArrangement = Arrangement.Center
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.WarningAmber,
+                    imageVector = What2EatIcons.WarningAmber,
                     contentDescription = null,
                     modifier = Modifier.size(64.dp),
                     tint = MaterialTheme.colorScheme.outline
@@ -930,7 +921,7 @@ private fun ResultsStep(
                     onClick = { viewModel.goBackToFirstPersonSelection() },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Icon(What2EatIcons.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.size(8.dp))
                     Text("返回修改选择")
                 }
@@ -1002,7 +993,7 @@ private fun ResultsStep(
                     .imePadding()
                     .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 0.dp)
             ) {
-                Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(20.dp))
+                Icon(What2EatIcons.Check, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.size(8.dp))
                 Text("生成最终推荐")
             }
@@ -1061,7 +1052,7 @@ private fun RecommendationStep(
             verticalArrangement = Arrangement.Center
         ) {
             Icon(
-                imageVector = Icons.Outlined.WarningAmber,
+                imageVector = What2EatIcons.WarningAmber,
                 contentDescription = null,
                 modifier = Modifier.size(64.dp),
                 tint = MaterialTheme.colorScheme.outline
@@ -1158,7 +1149,7 @@ private fun RecommendationStep(
                 recommendation.reasonTypes.forEach { type ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Outlined.Check,
+                            imageVector = What2EatIcons.Check,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp),
                             tint = MaterialTheme.colorScheme.primary
@@ -1196,7 +1187,7 @@ private fun RecommendationStep(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !uiState.isComputingRecommendation
             ) {
-                Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))
+                Icon(What2EatIcons.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.size(8.dp))
                 Text("换一个")
             }
@@ -1228,7 +1219,7 @@ private fun CompletedStep(
         verticalArrangement = Arrangement.Center
     ) {
         Icon(
-            imageVector = Icons.Outlined.Check,
+            imageVector = What2EatIcons.Check,
             contentDescription = null,
             modifier = Modifier.size(48.dp),
             tint = MaterialTheme.colorScheme.primary
