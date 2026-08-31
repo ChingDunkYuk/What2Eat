@@ -337,6 +337,60 @@ class ShareImportTest {
         assertTrue(draft.detectedName!!.length <= 30)
     }
 
+    // ── 美团分享：店名与「地址：」等元信息行混排 ──
+
+    @Test
+    fun `meituan multiline share skips address line and picks shop name`() {
+        val draft = ShareTextParser.createDraft(
+            rawText = "【美团】台屿·台湾食堂\n地址：番禺区兴南大道与万博二路交汇处锦麟万博L1-L2\n电话：020-39170000\nhttps://tb.htuiot.com/Qr4WxPm",
+            subject = null,
+            sourcePackage = "com.sankuai.meituan"
+        )
+        assertEquals("台屿·台湾食堂", draft.detectedName)
+    }
+
+    @Test
+    fun `meituan address only share yields null name for inbox fallback`() {
+        val draft = ShareTextParser.createDraft(
+            rawText = "https://tb.htuiot.com/Ab2CdE\n地址：番禺区奥园城市天地五区4栋1楼\n营业时间：10:00-22:00",
+            subject = null,
+            sourcePackage = "com.sankuai.meituan"
+        )
+        // 全是元信息行，提不出店名 → 收件箱兜底名占位
+        assertNull(draft.detectedName)
+        assertTrue(draft.needsReview)
+    }
+
+    @Test
+    fun `shop name and address in same line cut at address`() {
+        val draft = ShareTextParser.createDraft(
+            rawText = "探鲜记顺德桑拿鸡鱼·蒸汽海鲜(汉溪长隆店) 地址：番禺区奥园城市天地五区4栋1楼 https://tb.htuiot.com/Qq1Zz",
+            subject = null,
+            sourcePackage = "com.sankuai.meituan"
+        )
+        assertEquals("探鲜记顺德桑拿鸡鱼·蒸汽海鲜(汉溪长隆店)", draft.detectedName)
+    }
+
+    @Test
+    fun `name line with label prefix is extracted`() {
+        val draft = ShareTextParser.createDraft(
+            rawText = "店名：小肥羊(望京店)\n地址：朝阳区望京西路 https://tb.htuiot.com/Zz9",
+            subject = null,
+            sourcePackage = "com.sankuai.meituan"
+        )
+        assertEquals("小肥羊(望京店)", draft.detectedName)
+    }
+
+    @Test
+    fun `marketing header line loses to shop name line`() {
+        val draft = ShareTextParser.createDraft(
+            rawText = "我在美团发现一家宝藏店，快来\n探鲜记顺德桑拿鸡鱼·蒸汽海鲜(汉溪长隆店)\n地址：番禺区 https://tb.htuiot.com/Mm3",
+            subject = null,
+            sourcePackage = "com.sankuai.meituan"
+        )
+        assertEquals("探鲜记顺德桑拿鸡鱼·蒸汽海鲜(汉溪长隆店)", draft.detectedName)
+    }
+
     @Test
     fun `name stripped of platform suffix`() {
         val draft = ShareTextParser.createDraft(
