@@ -15,7 +15,9 @@ data class ShareImportDraft(
     val sourcePackage: String?,
     val detectedPlatform: SourcePlatform,
     val detectedUrl: String?,
-    val detectedName: String?
+    val detectedName: String?,
+    /** 从分享文本提取的「地址：/电话：/营业时间：」行，预填到表单备注（信息不丢） */
+    val detectedNotes: String? = null
 ) {
     /**
      * 是否进入 NEEDS_REVIEW：

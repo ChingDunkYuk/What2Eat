@@ -33,6 +33,7 @@ import com.what2eat.core.database.entity.SessionParticipantEntity
  *            新增 decision_recommendation 表。
  * Stage 4:   版本升级到 5，新增吃饭池 4 表：saved_option、saved_option_collection、
  *            saved_option_tag、person_option_preference。
+ * v0.7.8:    版本升级到 6，MIGRATION_5_6 清理旧解析缺陷留下的「地址：/电话：」脏名称。
  */
 @Database(
     entities = [
@@ -48,7 +49,7 @@ import com.what2eat.core.database.entity.SessionParticipantEntity
         SavedOptionTagEntity::class,
         PersonOptionPreferenceEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 abstract class What2EatDatabase : RoomDatabase() {

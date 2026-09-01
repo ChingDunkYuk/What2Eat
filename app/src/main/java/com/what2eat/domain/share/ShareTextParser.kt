@@ -8,12 +8,19 @@ import com.what2eat.domain.model.SourcePlatform
  * 名称优先级：1. EXTRA_SUBJECT；2. URL 前各行；3. URL 后各行；4. 全文首行；5. 留空兜底。
  *
  * 逐行扫描 + 噪声行过滤（美团/点评分享模板里店名与元信息混排）：
- * - 「地址：/电话：/营业时间：/人均：…」等元信息行直接跳过，不当店名；
+ * - 「地址：/电话：/营业时间：/人均：…」等元信息行直接跳过，不当店名（含「门店地址：」等前缀变体）；
  * - 「」【】中的候选店名优先（平台标签【美团】除外）；
  * - 命中营销话术/评分/销量/距离/地址等关键词即截断；
  * - 丢弃描述性括号尾巴（这家店超好吃），保留分店名（望京店）；
  * - 多行候选按打分择优（含括号店名、短、无营销词优先）；
  * - 超长时先按标点断句，再硬截断到 30 字。
+ *
+ * v0.7.8 加固：
+ * - NBSP/全角空格入口统一规范化（\s 与 trim 均不覆盖它们）；
+ * - 元信息标签后缀匹配（「门店地址」endsWith「地址」）；
+ * - [looksLikeMetadata] 最终护栏：subject/逐行/整体三道防线，地址电话类结果一律拒绝；
+ * - [extractInfoNotes]：地址/电话/营业时间行提取为备注预填；
+ * - [cleanWebTitle]：网页 <title> 净化（供链接标题抓取复用）。
  */
 object ShareTextParser {
 
@@ -21,6 +28,10 @@ object ShareTextParser {
     private val platformTags = listOf(
         "美团外卖", "大众点评", "美团", "饿了么", "高德地图", "百度地图", "口碑"
     )
+
+    /** NBSP(U+00A0)/全角空格(U+3000) → 半角空格（\s 与 String.trim 均不覆盖它们）。 */
+    internal fun normalizeWhitespace(s: String): String =
+        s.replace(Char(0x00A0), ' ').replace(Char(0x3000), ' ')
 
     /** 元信息行标签：「地址：番禺…」「电话：020…」这类行不含店名（店名：/名称： 是店名行，不在此列） */
     private val metadataLabels = listOf(
@@ -30,8 +41,30 @@ object ShareTextParser {
         "商家", "商户", "网址", "链接", "分享"
     )
 
-    /** 行首元信息：「标签：」其中标签 ≤ 5 字 */
-    private val metadataLineRegex = Regex("""^\s*([^：:，,。！!~\s]{1,5})\s*[：:]""")
+    /** 行首元信息：「标签：」其中标签 ≤ 5 字（容忍 NBSP/全角空格前缀） */
+    private val metadataLineRegex = Regex("""^[\s 　]*([^：:，,。！!~\s]{1,5})\s*[：:]""")
+
+    /** 明确的泄漏前缀（startsWith 检查用；刻意收窄：不含「特色/招牌/菜品/链接/分享/标签」等可能是真实店名/文案的词） */
+    private val leakPrefixes = listOf(
+        "地址", "电话", "联系电话", "营业时间", "营业", "人均", "评分",
+        "距离", "门店", "商家", "商户", "网址", "导航", "位置", "起送", "配送费", "配送"
+    )
+
+    /**
+     * 「标签：」样式检查用的标签集（非锚定匹配误杀风险更高，比 leakPrefixes 更收窄：
+     * 剔除「位置」，补充「人均消费」；绝不含「链接/分享/标签/特色/招牌/菜品」——
+     * 「这不是一个链接：http://」这类正常文案会被宽名单误杀）。
+     */
+    private val leakColonLabels = listOf(
+        "地址", "电话", "联系电话", "营业时间", "营业", "人均", "人均消费", "评分",
+        "距离", "门店", "商家", "商户", "网址", "导航", "起送", "配送费", "配送"
+    )
+
+    /** 「标签：」样式（非锚定，仅配合收窄的 leakColonLabels 使用） */
+    private val leakLabelColonRegex = Regex("""([^：:，,。！!~\s]{1,5})[：:]""")
+
+    /** 备注行标签（仅联系类元信息；endsWith 覆盖「门店地址/商家电话」等变体） */
+    private val notesLabels = listOf("地址", "电话", "联系电话", "营业时间", "营业")
 
     /** 营销/元信息关键词：命中位置即截断，其后内容不属于店名 */
     private val cutMarkers = listOf(
@@ -68,46 +101,50 @@ object ShareTextParser {
      * @param sourcePackage 来源包名（可空）
      */
     fun createDraft(rawText: String?, subject: String?, sourcePackage: String?): ShareImportDraft {
-        val text = rawText?.trim().orEmpty()
+        // 入口统一空白规范化（NBSP/全角空格 → 半角）
+        val text = normalizeWhitespace(rawText?.trim().orEmpty())
         val url = UrlNormalizer.extractFirstUrl(text)
         val platform = PlatformRecognizer.detect(sourcePackage, url, text)
-        val name = extractName(text, subject, url)
+        // 最后一道防线：任何路径产出的结果像元信息（地址/电话类）都不是店名
+        val name = extractName(text, subject, url)?.takeUnless { looksLikeMetadata(it) }
         return ShareImportDraft(
             rawText = text,
             subject = subject,
             sourcePackage = sourcePackage,
             detectedPlatform = platform,
             detectedUrl = url,
-            detectedName = name
+            detectedName = name,
+            detectedNotes = extractInfoNotes(text)
         )
     }
 
     /**
      * 名称提取（尽力而为）。
-     * 1. subject 非空且不含 URL → subject（同样净化）
+     * 1. subject 非空、含 ≥2 字、非 URL 且不像元信息 → subject（净化后）
      * 2. URL 前各行中择优
      * 3. URL 后各行中择优
      * 4. 全文各行中择优
      * 5. null（进入待整理，用兜底名占位）
      */
     fun extractName(rawText: String?, subject: String?, url: String?): String? {
-        // 1. subject（分享标题也可能是整句模板，需净化）
+        // 1. subject（分享标题也可能是整句模板，需净化；地址/电话类元信息标题拒绝）
         subject?.let { s ->
-            val clean = cleanTitle(s)
-            if (clean.isNotEmpty() && !clean.startsWith("http")) return clean
+            val clean = cleanTitle(normalizeWhitespace(s))
+            if (clean.length >= 2 && !clean.startsWith("http") && !looksLikeMetadata(clean)) return clean
         }
-        if (rawText != null) {
+        val text = rawText?.let { normalizeWhitespace(it) }
+        if (text != null) {
             if (url != null) {
-                val idx = rawText.indexOf(url)
+                val idx = text.indexOf(url)
                 if (idx >= 0) {
                     // 2. URL 前各行（店名通常在链接上方）
-                    pickNameLine(rawText.substring(0, idx).lines())?.let { return it }
+                    pickNameLine(text.substring(0, idx).lines())?.let { return it }
                     // 3. URL 后各行（链接在前、店名在后的格式）
-                    pickNameLine(rawText.substring(idx + url.length).lines())?.let { return it }
+                    pickNameLine(text.substring(idx + url.length).lines())?.let { return it }
                 }
             }
             // 4. 全文兜底
-            pickNameLine(rawText.lines())?.let { return it }
+            pickNameLine(text.lines())?.let { return it }
         }
         return null
     }
@@ -127,6 +164,8 @@ object ShareTextParser {
             if (isNoiseLine(t)) continue
             val cleaned = cleanTitle(t)
             if (cleaned.length < 2) continue
+            // 截断残片（如「门店」）或地址电话类结果不是店名
+            if (looksLikeMetadata(cleaned)) continue
 
             var score = 0
             if (hasBracketName(t)) score += 4
@@ -143,11 +182,59 @@ object ShareTextParser {
         return best
     }
 
-    /** 是否为噪声行：营销词开头，或「地址：/电话：」等元信息行。 */
+    /** 是否为噪声行：营销词开头，或「地址：/电话：」等元信息行（含「门店地址：」等前缀变体）。 */
     private fun isNoiseLine(line: String): Boolean {
         if (cutMarkers.any { line.startsWith(it) }) return true
         val label = metadataLineRegex.find(line)?.groupValues?.get(1)?.trim() ?: return false
-        return label in metadataLabels
+        return isMetadataLabel(label)
+    }
+
+    /** 元信息标签判定：精确或后缀匹配（「门店地址」endsWith「地址」、「商家电话」endsWith「电话」）。 */
+    private fun isMetadataLabel(label: String): Boolean =
+        metadataLabels.any { label == it || label.endsWith(it) }
+
+    /**
+     * 最终护栏：结果像元信息 → 不是店名。
+     * - 空串 / 以泄漏前缀开头（地址、电话、门店…）
+     * - 含「标签：」样式且标签命中收窄清单（如「地址：」）
+     * 非锚定的「含」检查只认 [leakColonLabels]，绝不含「链接/分享/标签/特色/招牌/菜品」，
+     * 否则会误杀「这不是一个链接：http://」这类正常文案。
+     */
+    internal fun looksLikeMetadata(text: String): Boolean {
+        val t = normalizeWhitespace(text).trim()
+        if (t.isEmpty()) return true
+        if (leakPrefixes.any { t.startsWith(it) }) return true
+        return leakLabelColonRegex.findAll(t).any { m ->
+            val label = m.groupValues[1].trim()
+            leakColonLabels.any { label == it || label.endsWith(it) }
+        }
+    }
+
+    /** 提取「地址：/电话：/营业时间：」行（保持原文顺序）拼为备注；无则 null。 */
+    fun extractInfoNotes(rawText: String?): String? {
+        if (rawText.isNullOrBlank()) return null
+        val lines = normalizeWhitespace(rawText).lines()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .filter { line ->
+                val label = metadataLineRegex.find(line)?.groupValues?.get(1)?.trim()
+                    ?: return@filter false
+                notesLabels.any { label == it || label.endsWith(it) }
+            }
+        return lines.takeIf { it.isNotEmpty() }?.joinToString("\n")
+    }
+
+    /**
+     * 网页 <title> 清洗（供链接标题抓取复用）：
+     * 空/URL/元信息/纯平台名 → null；复用 [cleanTitle] 净化与 [looksLikeMetadata] 护栏。
+     */
+    fun cleanWebTitle(raw: String): String? {
+        if (raw.isBlank()) return null
+        val cleaned = cleanTitle(normalizeWhitespace(raw))
+        if (cleaned.length < 2 || cleaned.startsWith("http")) return null
+        if (looksLikeMetadata(cleaned)) return null
+        if (cleaned in platformTags) return null
+        return cleaned
     }
 
     /** 行内是否有有效的「」【】店名（排除平台标签）。 */
@@ -157,8 +244,8 @@ object ShareTextParser {
             inner.length in 2..MAX_TITLE_LENGTH && inner !in platformTags
         }
 
-    /** 店名净化：去平台标签 → 取括号店名 → 截营销尾巴 → 去描述性括号 → 限长。 */
-    private fun cleanTitle(raw: String): String {
+    /** 店名净化：去平台标签 → 取括号店名 → 截营销尾巴 → 去描述性括号 → 限长。（internal：cleanWebTitle 复用） */
+    internal fun cleanTitle(raw: String): String {
         var s = raw.replace(Regex("""\s+"""), " ").trim()
 
         // 1) 整体移除【平台名】标签
@@ -190,11 +277,12 @@ object ShareTextParser {
             .minOrNull()
         if (cutIndex != null) s = s.substring(0, cutIndex)
 
-        // 5) 平台来源后缀
+        // 5) 平台来源后缀（含网页标题常用的「_平台名」「｜平台名」风格）
         s = s.substringBefore(" 来自").trim()
         s = Regex("""[（(]来自.*?[)）]\s*$""").replace(s, "").trim()
         for (p in platformTags) {
-            s = s.removeSuffix(" - $p").removeSuffix(" | $p").removeSuffix(" -$p").trim()
+            s = s.removeSuffix(" - $p").removeSuffix(" | $p").removeSuffix(" -$p")
+                .removeSuffix("_$p").removeSuffix("｜$p").trim()
         }
 
         // 6) 描述性括号尾巴（保留分店名）

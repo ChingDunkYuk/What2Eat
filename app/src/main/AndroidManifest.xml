@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- 分享链接标题抓取：解析不出店名时后台读取链接网页标题自动补名。
+         普通权限（安装即授予）；仅请求 https 链接，失败静默回退手动填写。 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- Stage 3.2：平台快捷承接所需的包可见性
          Android 11+ 需显式声明才能通过 PackageManager 查询大众点评/美团是否已安装。
          仅声明确有必要的平台包，不申请任何运行时权限。 -->

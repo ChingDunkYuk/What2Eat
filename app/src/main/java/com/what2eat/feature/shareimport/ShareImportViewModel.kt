@@ -10,6 +10,7 @@ import com.what2eat.domain.model.SourcePlatform
 import com.what2eat.domain.repository.SavedOptionRepository
 import com.what2eat.domain.share.DuplicateCheckResult
 import com.what2eat.domain.share.DuplicateDetector
+import com.what2eat.domain.share.LinkTitleFetcher
 import com.what2eat.domain.share.ShareImportDraft
 import com.what2eat.domain.share.ShareImportDefaults
 import com.what2eat.domain.share.ShareTextParser
@@ -35,7 +36,9 @@ data class ShareImportFormState(
     val duplicate: DuplicateCheckResult.Duplicate? = null,
     val savedOptionId: String? = null,
     val saved: Boolean = false,
-    val unsupported: Boolean = false
+    val unsupported: Boolean = false,
+    /** 后台正在抓取链接标题补店名 */
+    val isResolvingName: Boolean = false
 ) {
     /** 收件箱模式：解析出草稿即可保存，名称/类型允许留空（自动兜底） */
     val canSave: Boolean get() = draft != null
@@ -43,13 +46,17 @@ data class ShareImportFormState(
 
 @HiltViewModel
 class ShareImportViewModel @Inject constructor(
-    private val repository: SavedOptionRepository
+    private val repository: SavedOptionRepository,
+    private val linkTitleFetcher: LinkTitleFetcher
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ShareImportFormState())
     val uiState: StateFlow<ShareImportFormState> = _uiState.asStateFlow()
 
     private var initialized = false
+
+    /** 用户手动改过名称后，后台抓取的标题不再覆盖 */
+    private var nameTouchedByUser = false
 
     /**
      * 用 Intent 数据初始化表单。
@@ -68,12 +75,30 @@ class ShareImportViewModel @Inject constructor(
             name = draft.detectedName ?: "",
             type = defaultType,
             collections = defaultCols,
-            sourceUrl = draft.detectedUrl ?: ""
+            sourceUrl = draft.detectedUrl ?: "",
+            // 地址/电话/营业时间预填备注（信息不丢）
+            notes = draft.detectedNotes.orEmpty()
             // 收件箱模式：名称解析不出也不阻塞，保存时用兜底名称占位
         )
+        // 名称解析不出且有链接 → 后台抓网页 <title> 自动补店名（失败静默回退手动填写）
+        if (draft.detectedName == null && draft.detectedUrl != null) {
+            val url = draft.detectedUrl
+            _uiState.value = _uiState.value.copy(isResolvingName = true)
+            viewModelScope.launch {
+                val title = linkTitleFetcher.fetchTitle(url)
+                val s = _uiState.value
+                // 用户已手动输入/已保存 → 不覆盖
+                if (!title.isNullOrBlank() && !s.saved && s.name.isBlank() && !nameTouchedByUser) {
+                    _uiState.value = s.copy(name = title, isResolvingName = false)
+                } else {
+                    _uiState.value = s.copy(isResolvingName = false)
+                }
+            }
+        }
     }
 
     fun onNameChange(v: String) {
+        nameTouchedByUser = true
         _uiState.value = _uiState.value.copy(name = v, nameError = null)
     }
 

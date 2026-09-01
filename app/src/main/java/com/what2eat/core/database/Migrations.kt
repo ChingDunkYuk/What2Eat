@@ -2,6 +2,8 @@ package com.what2eat.core.database
 
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.what2eat.domain.model.SourcePlatform
+import com.what2eat.domain.share.ShareImportDefaults
 
 /**
  * Room 数据库 Migration 集合。
@@ -253,5 +255,54 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
             """.trimIndent()
         )
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_person_option_preference_savedOptionId` ON `person_option_preference` (`savedOptionId`)")
+    }
+}
+
+/**
+ * 旧数据泄漏名称前缀（与 v0.7.6/v0.7.7 已知泄漏路径对应：
+ * 地址/电话为主，门店/商家/商户为标签后缀匹配缺陷的次生泄漏）。
+ * internal：供单元测试直接验证判定逻辑。
+ */
+internal val legacyLeakedNamePrefixes = listOf("地址", "电话", "门店", "商家", "商户")
+
+/** 判断名称是否为 v0.7.7 之前解析缺陷泄漏的元信息（非店名）。 */
+internal fun isLegacyLeakedName(name: String): Boolean =
+    legacyLeakedNamePrefixes.any { name.startsWith(it) }
+
+/**
+ * MIGRATION_5_6: v5 → v6
+ * 清理 v0.7.7 之前分享解析缺陷留下的脏数据：name 字段存了「地址：…/电话：…」等元信息。
+ * 1. 泄漏文本先并入 notes（notes 为空时），信息不丢
+ * 2. name 换成平台占位名（「来自美团的分享」等，与运行时兜底单一来源）
+ * 3. importStatus 置为 NEEDS_REVIEW(=1)，进「待整理」等用户补店名
+ * 非 destructive：只改泄漏条目，正常数据一律不动。
+ */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        val leakedWhere = legacyLeakedNamePrefixes.joinToString(" OR ") { "name LIKE ?" }
+        val leakedArgs = legacyLeakedNamePrefixes.map { "$it%" }
+
+        // 1) 泄漏的地址/电话文本并入备注（仅 notes 为空时，不覆盖用户已填内容）
+        db.execSQL(
+            "UPDATE saved_option SET notes = name WHERE ($leakedWhere) AND (notes IS NULL OR notes = '')",
+            leakedArgs.toTypedArray()
+        )
+        // 2) 按来源平台换占位名 + 置 NEEDS_REVIEW；占位名复用 ShareImportDefaults，与运行时单一来源
+        SourcePlatform.entries.forEach { p ->
+            val args = buildList {
+                addAll(leakedArgs)
+                add(ShareImportDefaults.fallbackName(p))
+                add(p.ordinal)
+            }.toTypedArray()
+            db.execSQL(
+                "UPDATE saved_option SET name = ?, importStatus = 1 WHERE ($leakedWhere) AND sourcePlatform = ?",
+                args
+            )
+        }
+        // 3) 兜底：枚举之外的脏 sourcePlatform 值（理论上不存在，防御性处理）
+        db.execSQL(
+            "UPDATE saved_option SET name = '待整理的分享', importStatus = 1 WHERE $leakedWhere",
+            leakedArgs.toTypedArray()
+        )
     }
 }

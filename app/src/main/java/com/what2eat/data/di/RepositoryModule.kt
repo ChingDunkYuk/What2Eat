@@ -8,6 +8,8 @@ import com.what2eat.data.repository.PersonProfileRepositoryImpl
 import com.what2eat.data.repository.SavedOptionRepositoryImpl
 import com.what2eat.data.search.AndroidPlatformSearchLauncher
 import com.what2eat.data.search.AndroidSearchLauncher
+import com.what2eat.data.share.HttpLinkTitleFetcher
+import com.what2eat.domain.share.LinkTitleFetcher
 import com.what2eat.domain.engine.DecisionEngine
 import com.what2eat.domain.engine.DefaultDecisionEngine
 import com.what2eat.domain.repository.AppUsageModeRepository
@@ -79,6 +81,12 @@ abstract class RepositoryModule {
     abstract fun bindSavedOptionRepository(
         impl: SavedOptionRepositoryImpl
     ): SavedOptionRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindLinkTitleFetcher(
+        impl: HttpLinkTitleFetcher
+    ): LinkTitleFetcher
 
     companion object {
         @Provides

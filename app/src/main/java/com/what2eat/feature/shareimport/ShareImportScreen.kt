@@ -150,9 +150,12 @@ fun ShareImportScreen(
                 placeholder = { Text(fallbackName) },
                 isError = state.nameError != null,
                 supportingText = state.nameError?.let { { Text(it) } }
-                    ?: if (state.name.isBlank()) {
-                        { Text("未识别到店名，将使用「$fallbackName」") }
-                    } else null,
+                    ?: when {
+                        // 后台正在抓链接标题补店名
+                        state.isResolvingName -> { { Text("正在识别店名…") } }
+                        state.name.isBlank() -> { { Text("未识别到店名，将使用「$fallbackName」") } }
+                        else -> null
+                    },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
