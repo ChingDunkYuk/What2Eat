@@ -23,7 +23,7 @@ class ShareImportActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val rawText = intent?.getStringExtra(Intent.EXTRA_TEXT)
+        val rawText = resolveSharedText(intent)
         val subject = intent?.getStringExtra(Intent.EXTRA_SUBJECT)
         val sourcePackage = resolveSourcePackage(intent)
 
@@ -46,6 +46,24 @@ class ShareImportActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    /**
+     * 解析分享文本。
+     *
+     * v0.8.2：部分新版 App（美团等）ACTION_SEND 时 EXTRA_TEXT 为空或不完整，
+     * 完整文本放在 ClipData（官方备用通道）。EXTRA_TEXT 优先，空则读 ClipData 兜底。
+     */
+    private fun resolveSharedText(intent: Intent?): String? {
+        if (intent == null) return null
+        intent.getStringExtra(Intent.EXTRA_TEXT)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+        val clip = runCatching { intent.clipData }.getOrNull() ?: return null
+        if (clip.itemCount <= 0) return null
+        return runCatching { clip.getItemAt(0).coerceToText(this).toString() }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
     }
 
     /**

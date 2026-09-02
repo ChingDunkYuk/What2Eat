@@ -169,4 +169,120 @@ class ShareImportHardeningTest {
             HtmlTitleExtractor.parseTitle("<TITLE>\n  海底捞火锅\n</TITLE>")
         )
     }
+
+    // ── v0.8.2：URL query 店名提取（第 5 优先级兜底）──
+
+    @Test
+    fun `url query shop name extracted and decoded`() {
+        assertEquals(
+            "喜茶(望京店)",
+            ShareTextParser.extractNameFromUrlQuery(
+                "https://h5.waimai.meituan.com/shop/123?shopName=%E5%96%9C%E8%8C%B6(%E6%9C%9B%E4%BA%AC%E5%BA%97)&channel=share"
+            )
+        )
+        assertEquals(
+            "台屿·台湾食堂",
+            ShareTextParser.extractNameFromUrlQuery("https://x.dianping.com/poi?poiName=台屿·台湾食堂")
+        )
+    }
+
+    @Test
+    fun `url query extraction returns null for invalid cases`() {
+        // 无 query / 无店名参数
+        assertNull(ShareTextParser.extractNameFromUrlQuery("https://h5.waimai.meituan.com/shop/123"))
+        assertNull(ShareTextParser.extractNameFromUrlQuery("https://x.com/a?channel=share"))
+        // 值是 URL / 元信息 → 拒绝
+        assertNull(ShareTextParser.extractNameFromUrlQuery("https://x.com/a?title=https://evil.com"))
+        assertNull(ShareTextParser.extractNameFromUrlQuery("https://x.com/a?shopName=地址：番禺区"))
+    }
+
+    @Test
+    fun `create draft falls back to url query name when text has none`() {
+        // 括号用 %28/%29 编码（裸括号会被 URL 提取正则截断）
+        val draft = ShareTextParser.createDraft(
+            rawText = "https://h5.waimai.meituan.com/shop/123?poiName=%E5%B0%8F%E9%BE%99%E5%9D%8E%E7%81%AB%E9%94%85%28%E6%9C%9B%E4%BA%AC%E5%BA%97%29",
+            subject = null,
+            sourcePackage = "com.sankuai.meituan"
+        )
+        assertEquals("小龙坎火锅(望京店)", draft.detectedName)
+    }
+
+    // ── v0.8.2：诊断通道——名称彻底解析失败时原文进备注 ──
+
+    @Test
+    fun `raw text goes to notes when name unresolved`() {
+        val draft = ShareTextParser.createDraft(
+            rawText = "复制打开美团App https://tb.htuiot.com/Ab2CdE",
+            subject = null,
+            sourcePackage = "com.sankuai.meituan"
+        )
+        assertNull(draft.detectedName)
+        // 原文进备注：诊断通道（用户排查时直接看条目即可拿到原始分享文字）
+        assertEquals("复制打开美团App https://tb.htuiot.com/Ab2CdE", draft.detectedNotes)
+    }
+
+    @Test
+    fun `notes stay as metadata lines when name resolved`() {
+        val draft = ShareTextParser.createDraft(
+            rawText = "台屿·台湾食堂\n地址：番禺区兴南大道\nhttps://tb.htuiot.com/Qr4WxPm",
+            subject = null,
+            sourcePackage = "com.sankuai.meituan"
+        )
+        assertEquals("台屿·台湾食堂", draft.detectedName)
+        // 名称解析成功 → 维持地址/电话预填（非整段原文）
+        assertEquals("地址：番禺区兴南大道", draft.detectedNotes)
+    }
+
+    // ── v0.8.2：extractFirstUrl 保留 query（此前半角 ? 被当边界，query 整段丢失）──
+
+    @Test
+    fun `url extraction keeps query string`() {
+        assertEquals(
+            "https://h5.waimai.meituan.com/shop/123?poiName=%E5%B0%8F%E9%BE%99%E5%9D%8E",
+            UrlNormalizer.extractFirstUrl(
+                "小龙坎火锅 https://h5.waimai.meituan.com/shop/123?poiName=%E5%B0%8F%E9%BE%99%E5%9D%8E 快来看看"
+            )
+        )
+    }
+
+    @Test
+    fun `url extraction stops at full-width question mark`() {
+        assertEquals(
+            "https://h5.waimai.meituan.com/shop/123",
+            UrlNormalizer.extractFirstUrl("https://h5.waimai.meituan.com/shop/123？快来看看吧")
+        )
+    }
+
+    // ── v0.8.2：SchemeUrlExtractor —— App 唤起 scheme 落地页提取 ──
+
+    @Test
+    fun `scheme landing url extracted from query param`() {
+        assertEquals(
+            "https://h5.waimai.meituan.com/shop/123",
+            SchemeUrlExtractor.extractLandingUrl(
+                "imeituan://funding?url=https%3A%2F%2Fh5.waimai.meituan.com%2Fshop%2F123"
+            )
+        )
+        assertEquals(
+            "https://www.meituan.com/page/foodshop?poiId=1",
+            SchemeUrlExtractor.extractLandingUrl(
+                "imeituan://www.meituan.com/jump?landingUrl=https%3A%2F%2Fwww.meituan.com%2Fpage%2Ffoodshop%3FpoiId%3D1"
+            )
+        )
+    }
+
+    @Test
+    fun `trusted scheme host converted to https`() {
+        assertEquals(
+            "https://www.meituan.com/page/foodshop?poiId=1",
+            SchemeUrlExtractor.extractLandingUrl("imeituan://www.meituan.com/page/foodshop?poiId=1")
+        )
+    }
+
+    @Test
+    fun `untrusted scheme yields null`() {
+        assertNull(SchemeUrlExtractor.extractLandingUrl("weixin://dl/business?ticket=xxx"))
+        assertNull(SchemeUrlExtractor.extractLandingUrl("imeituan://unknown-host/xxx"))
+        assertNull(SchemeUrlExtractor.extractLandingUrl(""))
+    }
 }

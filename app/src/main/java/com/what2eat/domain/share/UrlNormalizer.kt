@@ -10,11 +10,17 @@ import java.util.Locale
  */
 object UrlNormalizer {
 
-    /** 从文本中提取第一个有效 http/https URL。无 URL 或非法则返回 null。 */
+    /**
+     * 从文本中提取第一个有效 http/https URL。无 URL 或非法则返回 null。
+     *
+     * v0.8.2 修复：半角「?」不再作为边界（它是 query 起始符）——此前 query 整段被丢弃，
+     * 导致分享链接携带的 shopName/poiId 等定位与店名参数全部丢失。
+     * 全角「？」仍作为中文断句边界排除。
+     */
     fun extractFirstUrl(text: String?): String? {
         if (text.isNullOrBlank()) return null
-        // 匹配 http(s):// 开头，直到空白或常见中文标点
-        val regex = Regex("""https?://[^\s"'<>（）()【】\[\]{}，,。；;！!？?]+""")
+        // 匹配 http(s):// 开头，直到空白或常见中文标点（半角 ? 保留，属 query 一部分）
+        val regex = Regex("""https?://[^\s"'<>（）()【】\[\]{}，,。；;！!？]+""")
         val raw = regex.find(text)?.value ?: return null
         return normalize(raw)
     }

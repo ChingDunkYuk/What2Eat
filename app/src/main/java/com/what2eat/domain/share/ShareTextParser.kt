@@ -1,11 +1,13 @@
 package com.what2eat.domain.share
 
 import com.what2eat.domain.model.SourcePlatform
+import java.net.URLDecoder
 
 /**
  * 分享文本解析（名称"尽力而为"提取）。
  *
- * 名称优先级：1. EXTRA_SUBJECT；2. URL 前各行；3. URL 后各行；4. 全文首行；5. 留空兜底。
+ * 名称优先级：1. EXTRA_SUBJECT；2. URL 前各行；3. URL 后各行；4. 全文首行；
+ * 5. URL query 店名参数（shopName/poiName 等）；6. 留空兜底。
  *
  * 逐行扫描 + 噪声行过滤（美团/点评分享模板里店名与元信息混排）：
  * - 「地址：/电话：/营业时间：/人均：…」等元信息行直接跳过，不当店名（含「门店地址：」等前缀变体）；
@@ -21,6 +23,10 @@ import com.what2eat.domain.model.SourcePlatform
  * - [looksLikeMetadata] 最终护栏：subject/逐行/整体三道防线，地址电话类结果一律拒绝；
  * - [extractInfoNotes]：地址/电话/营业时间行提取为备注预填；
  * - [cleanWebTitle]：网页 <title> 净化（供链接标题抓取复用）。
+ *
+ * v0.8.2 增强：
+ * - [extractNameFromUrlQuery]：URL query 中的店名参数（shopName/poiName/title 等）解码提取（第 5 优先级）；
+ * - 名称彻底解析失败时，原文进备注（诊断通道：信息不丢，且后续排查可直接看条目）。
  */
 object ShareTextParser {
 
@@ -93,10 +99,20 @@ object ShareTextParser {
     /** 店名长度上限（先按标点断句，再硬截断） */
     private const val MAX_TITLE_LENGTH = 30
 
+    /** 名称彻底解析失败时，原文进备注的长度上限（诊断通道，防超长文本撑爆备注栏） */
+    private const val RAW_TEXT_NOTES_LIMIT = 500
+
+    /** URL query 中常见的店名参数名（美团/点评等分享链接携带） */
+    private val urlNameKeys = listOf(
+        "shopName", "shop_name", "shopTitle", "shop_title",
+        "poiName", "poi_name", "storeName", "store_name",
+        "brandName", "brand_name", "merchantName", "merchant_name", "title"
+    )
+
     /**
      * 从 Intent 数据生成 ShareImportDraft。
      *
-     * @param rawText 分享文本（EXTRA_TEXT）
+     * @param rawText 分享文本（EXTRA_TEXT 或 ClipData）
      * @param subject 分享标题（EXTRA_SUBJECT）
      * @param sourcePackage 来源包名（可空）
      */
@@ -107,6 +123,8 @@ object ShareTextParser {
         val platform = PlatformRecognizer.detect(sourcePackage, url, text)
         // 最后一道防线：任何路径产出的结果像元信息（地址/电话类）都不是店名
         val name = extractName(text, subject, url)?.takeUnless { looksLikeMetadata(it) }
+            // v0.8.2：文本解析不出时，从 URL query 店名参数兜底
+            ?: url?.let { extractNameFromUrlQuery(it) }
         return ShareImportDraft(
             rawText = text,
             subject = subject,
@@ -114,7 +132,13 @@ object ShareTextParser {
             detectedPlatform = platform,
             detectedUrl = url,
             detectedName = name,
-            detectedNotes = extractInfoNotes(text)
+            // v0.8.2 诊断通道：名称彻底解析失败 → 原文进备注（信息不丢，排查时直接看条目）；
+            // 解析成功 → 维持 v0.7.8 的地址/电话行预填
+            detectedNotes = if (name == null && text.isNotBlank()) {
+                text.take(RAW_TEXT_NOTES_LIMIT)
+            } else {
+                extractInfoNotes(text)
+            }
         )
     }
 
@@ -222,6 +246,30 @@ object ShareTextParser {
                 notesLabels.any { label == it || label.endsWith(it) }
             }
         return lines.takeIf { it.isNotEmpty() }?.joinToString("\n")
+    }
+
+    /**
+     * v0.8.2：从 URL query 提取店名参数（第 5 优先级兜底）。
+     *
+     * 美团/点评等分享链接常携带 shopName=/poiName=/title= 等结构化店名参数，
+     * 值可能 URL 编码。解码 → [cleanTitle] 净化 → [looksLikeMetadata] 护栏。
+     * 无命中参数或值无效返回 null。
+     */
+    internal fun extractNameFromUrlQuery(url: String): String? {
+        val query = url.substringAfter('?', "")
+        if (query.isEmpty()) return null
+        for (pair in query.split('&')) {
+            val key = pair.substringBefore('=').trim()
+            if (key !in urlNameKeys) continue
+            val encoded = pair.substringAfter('=', "")
+            if (encoded.isEmpty()) continue
+            val value = runCatching { URLDecoder.decode(encoded, "UTF-8") }.getOrNull() ?: continue
+            val cleaned = cleanTitle(value)
+            if (cleaned.length >= 2 && !cleaned.startsWith("http") && !looksLikeMetadata(cleaned)) {
+                return cleaned
+            }
+        }
+        return null
     }
 
     /**

@@ -2,6 +2,7 @@ package com.what2eat.data.share
 
 import com.what2eat.domain.share.HtmlTitleExtractor
 import com.what2eat.domain.share.LinkTitleFetcher
+import com.what2eat.domain.share.SchemeUrlExtractor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -14,7 +15,10 @@ import kotlin.math.min
 /**
  * HttpURLConnection 版链接标题抓取（无第三方依赖）。
  *
- * - 手动跟随重定向（覆盖 http↔https 协议切换），上限 3 次
+ * - 手动跟随重定向（覆盖 http↔https 协议切换），上限 5 次
+ *   （v0.8.2：美团短链常 3 跳以上：短链 → 中转 → App 唤起页/落地页）
+ * - v0.8.2：重定向到 App 唤起 scheme（imeituan:// 等）时，提取落地 https 页继续抓
+ * - v0.8.2：补 Referer 头（部分平台对无 Referer 请求返回 403）
  * - 移动端 UA（移动版页面更轻、标题更完整）
  * - 流式读取上限 64KB 或读到 </title> 即停（美团页面体积大，无需全量下载）
  * - 一切异常 → null（调用方静默回退手动填写，不阻塞不报错）
@@ -36,13 +40,19 @@ class HttpLinkTitleFetcher @Inject constructor() : LinkTitleFetcher {
                 setRequestProperty("User-Agent", MOBILE_UA)
                 setRequestProperty("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
                 setRequestProperty("Accept-Encoding", "identity")
+                setRequestProperty("Referer", "https://www.meituan.com/")
             }
             try {
                 when (conn.responseCode) {
                     in 300..399 -> {
                         val location = conn.getHeaderField("Location") ?: return null
-                        // 相对地址基于当前 URL 解析
-                        current = URL(URL(current), location).toString()
+                        if (location.startsWith("http://", true) || location.startsWith("https://", true)) {
+                            // 相对/绝对地址基于当前 URL 解析
+                            current = URL(URL(current), location).toString()
+                        } else {
+                            // App 唤起 scheme（imeituan:// 等）→ 尝试提取落地 https 页，提取不到放弃
+                            current = SchemeUrlExtractor.extractLandingUrl(location) ?: return null
+                        }
                     }
                     HttpURLConnection.HTTP_OK -> return readTitle(conn)
                     else -> return null
@@ -105,7 +115,7 @@ class HttpLinkTitleFetcher @Inject constructor() : LinkTitleFetcher {
 
     private companion object {
         const val TIMEOUT_MS = 5_000
-        const val MAX_REDIRECTS = 3
+        const val MAX_REDIRECTS = 5
         const val MAX_READ_BYTES = 64 * 1024
         const val MOBILE_UA =
             "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
