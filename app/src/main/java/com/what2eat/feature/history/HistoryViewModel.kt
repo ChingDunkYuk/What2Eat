@@ -3,6 +3,9 @@ package com.what2eat.feature.history
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.what2eat.domain.history.HistoryDateGrouper
+import com.what2eat.domain.history.HistoryStatEntry
+import com.what2eat.domain.history.HistoryStatsCalculator
 import com.what2eat.domain.model.DecisionMode
 import com.what2eat.domain.model.SessionStatus
 import com.what2eat.domain.repository.DecisionSessionRepository
@@ -20,6 +23,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
@@ -124,17 +129,42 @@ class HistoryViewModel @Inject constructor(
                     HistoryItem(
                         sessionId = session.id,
                         categoryName = resultName,
+                        completedAt = session.completedAt ?: session.createdAt,
                         completedAtText = formatTime(session.completedAt ?: session.createdAt),
                         decisionModeText = modeText(session.decisionMode),
+                        rerollCount = session.rerollCount,
                         participants = participants
                     )
                 }
-                HistoryUiState(isLoading = false, items = items, isEmpty = items.isEmpty())
+
+                // v0.8.1：统计 + 按日分组
+                val stats = HistoryStatsCalculator.compute(
+                    entries = items.map {
+                        HistoryStatEntry(
+                            name = it.categoryName,
+                            completedAt = it.completedAt,
+                            rerollCount = it.rerollCount
+                        )
+                    },
+                    nowMillis = System.currentTimeMillis()
+                )
+                val groups = HistoryDateGrouper
+                    .groupByDay(items, { it.completedAt })
+                    .map { group ->
+                        HistoryGroupView(label = dayLabel(group.epochDay), items = group.items)
+                    }
+
+                HistoryUiState(
+                    isLoading = false,
+                    groups = groups,
+                    stats = stats,
+                    isEmpty = items.isEmpty()
+                )
             }
                 .distinctUntilChanged()
                 .collect { state ->
                     _uiState.value = state
-                    Log.d(TAG, "history updated: ${state.items.size} records")
+                    Log.d(TAG, "history updated: ${state.groups.sumOf { it.items.size }} records")
                 }
         }
     }
@@ -143,6 +173,27 @@ class HistoryViewModel @Inject constructor(
         return when (mode) {
             DecisionMode.CATEGORY_FIRST -> "先决定吃什么"
             DecisionMode.POOL_FIRST -> "从吃饭池决定"
+        }
+    }
+
+    /**
+     * v0.8.1：分组头标签。
+     * 今天 / 昨天 / M月d日（同年）/ yyyy年M月d日（跨年）。
+     */
+    private fun dayLabel(epochDay: Long): String {
+        val zone = ZoneId.systemDefault()
+        val today = LocalDate.now(zone).toEpochDay()
+        return when (today - epochDay) {
+            0L -> "今天"
+            1L -> "昨天"
+            else -> {
+                val date = LocalDate.ofEpochDay(epochDay)
+                if (date.year == LocalDate.now(zone).year) {
+                    "${date.monthValue}月${date.dayOfMonth}日"
+                } else {
+                    "${date.year}年${date.monthValue}月${date.dayOfMonth}日"
+                }
+            }
         }
     }
 

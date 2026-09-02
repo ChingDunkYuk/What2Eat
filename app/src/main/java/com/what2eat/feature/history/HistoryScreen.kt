@@ -13,10 +13,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -37,15 +39,16 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.what2eat.R
+import com.what2eat.domain.history.HistoryStats
 import com.what2eat.feature.common.PlatformSearchSheet
 
 /**
  * 历史页面。
  *
- * Stage 2.2 封版：最小历史展示。
- * 每条记录展示：最终分类、完成时间、decisionMode、参与人物、sessionId。
- *
- * Stage 3.2：新增"再次搜索"按钮，点击后打开与决策完成页同一套平台承接 BottomSheet。
+ * Stage 2.2 封版：最小历史展示（最终分类、完成时间、decisionMode、参与人物）。
+ * Stage 3.2：新增"再次搜索"按钮，复用决策完成页同一套平台承接 BottomSheet。
+ * v0.8.1：顶部统计卡（总次数/本月/平均换一个/最常吃 Top5）+ 按日分组时间线；
+ *         移除卡片上的 sessionId 调试信息。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -123,7 +126,7 @@ fun HistoryScreen(
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        item {
+                        item(key = "title") {
                             Text(
                                 text = stringResource(R.string.history_title),
                                 style = MaterialTheme.typography.headlineMedium,
@@ -131,11 +134,31 @@ fun HistoryScreen(
                                 modifier = Modifier.padding(vertical = 8.dp)
                             )
                         }
-                        items(uiState.items, key = { it.sessionId }) { item ->
-                            HistoryCard(
-                                item = item,
-                                onSearchAgain = { viewModel.showSearchPanel(item.categoryName) }
-                            )
+
+                        // ── v0.8.1：统计卡 ──
+                        uiState.stats?.let { stats ->
+                            item(key = "stats") {
+                                StatsCard(stats = stats)
+                            }
+                        }
+
+                        // ── v0.8.1：按日分组时间线 ──
+                        uiState.groups.forEach { group ->
+                            item(key = "header_${group.label}") {
+                                Text(
+                                    text = group.label,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 8.dp)
+                                )
+                            }
+                            items(group.items, key = { it.sessionId }) { item ->
+                                HistoryCard(
+                                    item = item,
+                                    onSearchAgain = { viewModel.showSearchPanel(item.categoryName) }
+                                )
+                            }
                         }
                     }
                 }
@@ -151,6 +174,133 @@ fun HistoryScreen(
             onPlatformSearch = viewModel::onPlatformSearch,
             onCopySearch = viewModel::onCopySearch
         )
+    }
+}
+
+/**
+ * v0.8.1 统计卡：总决定 / 本月决定 / 平均换一个 + 最常吃 Top 5。
+ */
+@Composable
+private fun StatsCard(stats: HistoryStats) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = What2EatIcons.Schedule,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp)
+                )
+                Text(
+                    text = "吃饭小统计",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // 三个统计数字
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                StatBlock(
+                    value = stats.totalDecisions.toString(),
+                    label = "总决定",
+                    modifier = Modifier.weight(1f)
+                )
+                StatBlock(
+                    value = stats.thisMonthDecisions.toString(),
+                    label = "本月",
+                    modifier = Modifier.weight(1f)
+                )
+                StatBlock(
+                    value = formatReroll(stats.averageRerollCount),
+                    label = "平均换一个",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            // 最常吃 Top 5
+            if (stats.topFoods.isNotEmpty()) {
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.15f)
+                )
+                Text(
+                    text = "最常吃",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                stats.topFoods.forEachIndexed { index, entry ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = What2EatIcons.Restaurant,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "${index + 1}. ${entry.name}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = "×${entry.count}次",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 单个统计数字块 */
+@Composable
+private fun StatBlock(
+    value: String,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+/** 平均换一个格式化：整数省略小数，非整数保留 1 位 */
+private fun formatReroll(value: Double): String {
+    return if (value == value.toLong().toDouble()) {
+        "${value.toLong()}次"
+    } else {
+        "${value}次"
     }
 }
 
@@ -195,11 +345,6 @@ private fun HistoryCard(
                 text = "参与人物：${item.participants.joinToString("、")}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = "会话：${item.sessionId}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline
             )
             // Stage 3.2：再次搜索
             Row(
