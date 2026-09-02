@@ -1,5 +1,6 @@
 package com.what2eat.domain.share
 
+import com.what2eat.domain.model.SourcePlatform
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -250,6 +251,52 @@ class ShareImportHardeningTest {
         assertEquals(
             "https://h5.waimai.meituan.com/shop/123",
             UrlNormalizer.extractFirstUrl("https://h5.waimai.meituan.com/shop/123？快来看看吧")
+        )
+    }
+
+    // ── v0.8.3：反引号包裹的链接（美团点评真实分享模板 `` `url` ``）──
+
+    @Test
+    fun `url extraction drops wrapping backticks`() {
+        // 真实案例：尾部反引号此前被吃进 URL → 短链 404 → 标题抓取整链路失败
+        assertEquals(
+            "http://dpurl.cn/cgDhxzyz",
+            UrlNormalizer.extractFirstUrl("@美团`http://dpurl.cn/cgDhxzyz`")
+        )
+        assertEquals(
+            "https://tb.htuiot.com/Qr4WxPm",
+            UrlNormalizer.extractFirstUrl("`https://tb.htuiot.com/Qr4WxPm` 分享")
+        )
+    }
+
+    @Test
+    fun `real meituan template with backtick link yields clean draft`() {
+        // 用户提供的真实分享文字（地址+电话+反引号包裹短链，无店名）
+        val draft = ShareTextParser.createDraft(
+            rawText = "【地址:番禺区汉溪大道东182号长隆时代cr8第二层自编209】【电话:020-84825827】@美团`http://dpurl.cn/cgDhxzyz`",
+            subject = null,
+            sourcePackage = "com.sankuai.meituan"
+        )
+        // URL 干净（无尾部反引号）——短链可正常跳转，标题抓取链路恢复
+        assertEquals("http://dpurl.cn/cgDhxzyz", draft.detectedUrl)
+        // 文本里无店名（全是地址/电话/链接）→ 名称走链接抓取兜底，此处为 null
+        assertNull(draft.detectedName)
+        // 地址/电话进备注（预填信息不丢）
+        assertNotNull(draft.detectedNotes)
+        assertTrue(draft.detectedNotes!!.contains("地址"))
+        assertTrue(draft.detectedNotes!!.contains("电话"))
+    }
+
+    @Test
+    fun `dpurl short link maps to dianping platform`() {
+        // dpurl.cn 是点评系短链域名（美团分享模板常用其跳转点评 H5）
+        assertEquals(
+            SourcePlatform.DIANPING,
+            PlatformRecognizer.detect(null, "http://dpurl.cn/cgDhxzyz", null)
+        )
+        assertEquals(
+            SourcePlatform.MEITUAN,
+            PlatformRecognizer.detect(null, "https://tb.htuiot.com/Qr4WxPm", null)
         )
     }
 

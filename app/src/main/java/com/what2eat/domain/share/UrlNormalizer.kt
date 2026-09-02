@@ -16,11 +16,14 @@ object UrlNormalizer {
      * v0.8.2 修复：半角「?」不再作为边界（它是 query 起始符）——此前 query 整段被丢弃，
      * 导致分享链接携带的 shopName/poiId 等定位与店名参数全部丢失。
      * 全角「？」仍作为中文断句边界排除。
+     *
+     * v0.8.3 修复：反引号「`」（美团点评分享模板用 `` `url` `` 包裹链接）加入边界——
+     * 此前尾部反引号被吃进 URL，短链请求 404，标题抓取整链路静默失败。
      */
     fun extractFirstUrl(text: String?): String? {
         if (text.isNullOrBlank()) return null
-        // 匹配 http(s):// 开头，直到空白或常见中文标点（半角 ? 保留，属 query 一部分）
-        val regex = Regex("""https?://[^\s"'<>（）()【】\[\]{}，,。；;！!？]+""")
+        // 匹配 http(s):// 开头，直到空白或常见中文标点/包裹符（半角 ? 保留，属 query 一部分）
+        val regex = Regex("""https?://[^\s"'`<>（）()【】\[\]{}，,。；;！!？]+""")
         val raw = regex.find(text)?.value ?: return null
         return normalize(raw)
     }

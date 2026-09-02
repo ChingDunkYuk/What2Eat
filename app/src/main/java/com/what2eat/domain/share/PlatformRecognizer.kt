@@ -23,8 +23,12 @@ object PlatformRecognizer {
     private val hostMap = mapOf(
         "www.dianping.com" to SourcePlatform.DIANPING,
         "m.dianping.com" to SourcePlatform.DIANPING,
+        // v0.8.3：点评系短链域名（美团分享模板常用 dpurl.cn 跳转点评 H5）
+        "dpurl.cn" to SourcePlatform.DIANPING,
         "www.meituan.com" to SourcePlatform.MEITUAN,
         "m.meituan.com" to SourcePlatform.MEITUAN,
+        // v0.8.3：美团系短链域名（分享短信/模板常见）
+        "tb.htuiot.com" to SourcePlatform.MEITUAN,
         "www.amap.com" to SourcePlatform.AMAP,
         "uri.amap.com" to SourcePlatform.AMAP,
         "map.baidu.com" to SourcePlatform.BAIDU_MAP,
