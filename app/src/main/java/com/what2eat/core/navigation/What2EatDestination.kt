@@ -41,7 +41,7 @@ sealed class BottomNavDestination(
  * 非底部导航的额外路由。
  */
 object What2EatRoutes {
-    const val PLACEHOLDER_POOL = "placeholder/pool"
+    const val POOL_DECISION = "pool_decision"
     const val PREFERENCE = "preference/{personId}"
     const val DECISION_FLOW = "decision_flow?startNew={startNew}"
     const val FOOD_OPTION_EDIT = "food_pool/edit?optionId={optionId}"

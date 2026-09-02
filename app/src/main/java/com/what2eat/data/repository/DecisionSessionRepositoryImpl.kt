@@ -221,6 +221,22 @@ class DecisionSessionRepositoryImpl @Inject constructor(
         }
     }
 
+    /**
+     * 吃饭池决策完成：单事务写入 COMPLETED 会话（含 selectedOptionId）+ 参与者，
+     * 避免出现"会话已写入但参与者缺失"的半完成状态。
+     */
+    override suspend fun completePoolDecision(
+        session: DecisionSession,
+        participants: List<SessionParticipant>
+    ): String {
+        database.withTransaction {
+            sessionDao.upsert(session.toEntity())
+            participantDao.deleteBySession(session.id)
+            participantDao.upsertAll(participants.map { it.toEntity() })
+        }
+        return session.id
+    }
+
     override suspend fun completeSessionWithRecommendation(
         id: String,
         categoryId: String,
@@ -274,6 +290,7 @@ class DecisionSessionRepositoryImpl @Inject constructor(
             budgetLevel = BudgetLevel.entries.getOrElse(budgetLevel) { BudgetLevel.UNLIMITED },
             distanceLevel = DistanceLevel.entries.getOrElse(distanceLevel) { DistanceLevel.UNLIMITED },
             selectedCategoryId = selectedCategoryId,
+            selectedOptionId = selectedOptionId,
             rerollCount = rerollCount,
             finalWeight = finalWeight,
             createdAt = createdAt,
@@ -293,6 +310,7 @@ class DecisionSessionRepositoryImpl @Inject constructor(
             budgetLevel = budgetLevel.ordinal,
             distanceLevel = distanceLevel.ordinal,
             selectedCategoryId = selectedCategoryId,
+            selectedOptionId = selectedOptionId,
             rerollCount = rerollCount,
             finalWeight = finalWeight,
             createdAt = createdAt,

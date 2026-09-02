@@ -1,8 +1,13 @@
 package com.what2eat.domain.model
 
-/** 决策模式 */
+/**
+ * 决策模式。
+ * 存库为 ordinal：新值必须追加在末尾，保持既有 ordinal 稳定。
+ */
 enum class DecisionMode {
-    CATEGORY_FIRST
+    CATEGORY_FIRST,
+    /** 从吃饭池的具体选项中决定（v0.8.0，ordinal=1） */
+    POOL_FIRST
 }
 
 /** 决策会话状态 */

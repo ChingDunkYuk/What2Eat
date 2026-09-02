@@ -28,7 +28,7 @@ import com.what2eat.feature.foodpool.FoodOptionEditScreen
 import com.what2eat.feature.foodpool.FoodPoolScreen
 import com.what2eat.feature.history.HistoryScreen
 import com.what2eat.feature.home.HomeScreen
-import com.what2eat.feature.placeholder.PlaceholderScreen
+import com.what2eat.feature.pooldecision.PoolDecisionScreen
 import com.what2eat.feature.preference.PreferenceScreen
 import com.what2eat.feature.settings.SettingsScreen
 
@@ -108,7 +108,7 @@ fun What2EatNavHost(initialOptionId: String? = null) {
                         navController.navigate(What2EatRoutes.decisionFlowRoute(startNew = true))
                     },
                     onPoolDecideClick = {
-                        navController.navigate(What2EatRoutes.PLACEHOLDER_POOL)
+                        navController.navigate(What2EatRoutes.POOL_DECISION)
                     },
                     onContinueSessionClick = {
                         navController.navigate(What2EatRoutes.decisionFlowRoute(startNew = false))
@@ -173,12 +173,20 @@ fun What2EatNavHost(initialOptionId: String? = null) {
                 )
             }
 
-            // ── 占位页面 ──
+            // ── 从吃饭池决定 ──
 
-            composable(What2EatRoutes.PLACEHOLDER_POOL) {
-                PlaceholderScreen(
-                    title = "从我的吃饭池决定",
-                    description = "此功能将在后续版本中开发"
+            composable(What2EatRoutes.POOL_DECISION) {
+                PoolDecisionScreen(
+                    onExit = { navController.popBackStack() },
+                    onGoToPool = {
+                        navController.navigate(BottomNavDestination.FoodPool.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
                 )
             }
 

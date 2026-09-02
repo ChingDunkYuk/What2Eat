@@ -20,6 +20,8 @@ data class DecisionSessionEntity(
     val budgetLevel: Int,
     val distanceLevel: Int,
     val selectedCategoryId: String?,
+    /** 吃饭池决策选中的选项 id（POOL_FIRST 模式 COMPLETED 时有值；v7 新增） */
+    val selectedOptionId: String? = null,
     val rerollCount: Int,
     val finalWeight: Double,
     val createdAt: Long,

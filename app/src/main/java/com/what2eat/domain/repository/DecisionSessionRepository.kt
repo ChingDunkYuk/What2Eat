@@ -85,6 +85,19 @@ interface DecisionSessionRepository {
         finalWeight: Double
     )
 
+    /**
+     * 吃饭池决策完成（「从吃饭池决定」唯一入口）：
+     * 在单个数据库事务内写入 COMPLETED 会话（含 selectedOptionId）+ 参与者。
+     * 轻量流程不落 DRAFT 会话，确认时一次性落库。
+     *
+     * @param session 已组装好的会话（status=COMPLETED、selectedOptionId 有值）
+     * @return sessionId
+     */
+    suspend fun completePoolDecision(
+        session: DecisionSession,
+        participants: List<SessionParticipant>
+    ): String
+
     /** 完成会话并保存最终推荐（状态 → COMPLETED） */
     suspend fun completeSessionWithRecommendation(
         id: String,

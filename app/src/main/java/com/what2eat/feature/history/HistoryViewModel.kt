@@ -8,6 +8,7 @@ import com.what2eat.domain.model.SessionStatus
 import com.what2eat.domain.repository.DecisionSessionRepository
 import com.what2eat.domain.repository.FoodCategoryRepository
 import com.what2eat.domain.repository.PersonProfileRepository
+import com.what2eat.domain.repository.SavedOptionRepository
 import com.what2eat.domain.search.PlatformSearchLauncher
 import com.what2eat.domain.search.SearchLauncher
 import com.what2eat.domain.search.SearchPlatform
@@ -38,6 +39,7 @@ class HistoryViewModel @Inject constructor(
     private val sessionRepository: DecisionSessionRepository,
     private val personProfileRepository: PersonProfileRepository,
     private val foodCategoryRepository: FoodCategoryRepository,
+    private val savedOptionRepository: SavedOptionRepository,
     private val platformSearchLauncher: PlatformSearchLauncher,
     private val searchLauncher: SearchLauncher
 ) : ViewModel() {
@@ -96,7 +98,10 @@ class HistoryViewModel @Inject constructor(
             ) { sessions, profiles ->
                 val profileByName = profiles.associateBy { it.id }
                 val completed = sessions
-                    .filter { it.status == SessionStatus.COMPLETED && it.selectedCategoryId != null }
+                    .filter {
+                        it.status == SessionStatus.COMPLETED &&
+                            (it.selectedCategoryId != null || it.selectedOptionId != null)
+                    }
                     .sortedByDescending { it.completedAt ?: it.createdAt }
 
                 if (completed.isEmpty()) return@combine HistoryUiState(isLoading = false, isEmpty = true)
@@ -105,11 +110,20 @@ class HistoryViewModel @Inject constructor(
                     val participants = sessionRepository.getParticipants(session.id)
                         .sortedBy { it.selectionOrder }
                         .map { profileByName[it.personId]?.name ?: it.personId }
-                    val category = session.selectedCategoryId
-                        ?.let { runCatching { foodCategoryRepository.getById(it) }.getOrNull() }
+                    // 池决策显示店名；分类决策显示分类名
+                    val resultName = if (session.selectedOptionId != null) {
+                        val option = runCatching {
+                            savedOptionRepository.getById(session.selectedOptionId)
+                        }.getOrNull()
+                        option?.name ?: "已删除的选项"
+                    } else {
+                        val category = session.selectedCategoryId
+                            ?.let { runCatching { foodCategoryRepository.getById(it) }.getOrNull() }
+                        category?.name ?: session.selectedCategoryId ?: "未知分类"
+                    }
                     HistoryItem(
                         sessionId = session.id,
-                        categoryName = category?.name ?: session.selectedCategoryId ?: "未知分类",
+                        categoryName = resultName,
                         completedAtText = formatTime(session.completedAt ?: session.createdAt),
                         decisionModeText = modeText(session.decisionMode),
                         participants = participants
@@ -128,6 +142,7 @@ class HistoryViewModel @Inject constructor(
     private fun modeText(mode: DecisionMode): String {
         return when (mode) {
             DecisionMode.CATEGORY_FIRST -> "先决定吃什么"
+            DecisionMode.POOL_FIRST -> "从吃饭池决定"
         }
     }
 

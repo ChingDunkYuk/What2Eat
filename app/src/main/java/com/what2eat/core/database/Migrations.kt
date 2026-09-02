@@ -306,3 +306,14 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
         )
     }
 }
+
+/**
+ * MIGRATION_6_7: v6 → v7
+ * 「从吃饭池决定」：decision_session 新增 selectedOptionId 列（吃饭池决策选中的选项 id）。
+ * 纯加列，无表结构外变更，不影响既有数据（存量分类决策会话该列为 NULL）。
+ */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `decision_session` ADD COLUMN `selectedOptionId` TEXT")
+    }
+}

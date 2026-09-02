@@ -15,6 +15,8 @@ data class DecisionSession(
     val distanceLevel: DistanceLevel = DistanceLevel.UNLIMITED,
     /** 最终确认的分类 id（COMPLETED 时有值） */
     val selectedCategoryId: String? = null,
+    /** 最终确认的吃饭池选项 id（POOL_FIRST 模式 COMPLETED 时有值） */
+    val selectedOptionId: String? = null,
     /** 换一个次数 */
     val rerollCount: Int = 0,
     /** 最终推荐权重（调试用） */
