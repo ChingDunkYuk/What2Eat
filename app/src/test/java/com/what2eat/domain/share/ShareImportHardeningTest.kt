@@ -13,6 +13,11 @@ import org.junit.Test
  *
  * 背景：v0.7.7 的行级过滤对 NBSP/全角空格前缀的「地址：」行失明，
  * 且缺少最终护栏，导致部分美团分享仍把地址当店名入库。
+ *
+ * v0.8.2：URL query 店名提取、反引号链接前的 query 保留、scheme 落地页提取、
+ * 名称解析失败时原文进备注（诊断通道）。
+ * v0.8.3：反引号包裹链接（真实美团分享模板）。
+ * v0.8.4：唤起页 poiId 提取（构造 POI H5 二次抓取）、短链域名平台识别改为文本特征优先。
  */
 class ShareImportHardeningTest {
 
@@ -288,8 +293,8 @@ class ShareImportHardeningTest {
     }
 
     @Test
-    fun `dpurl short link maps to dianping platform`() {
-        // dpurl.cn 是点评系短链域名（美团分享模板常用其跳转点评 H5）
+    fun `short link without text features falls back to domain default`() {
+        // 短链域名兜底归属（文本无特征时）
         assertEquals(
             SourcePlatform.DIANPING,
             PlatformRecognizer.detect(null, "http://dpurl.cn/cgDhxzyz", null)
@@ -331,5 +336,67 @@ class ShareImportHardeningTest {
         assertNull(SchemeUrlExtractor.extractLandingUrl("weixin://dl/business?ticket=xxx"))
         assertNull(SchemeUrlExtractor.extractLandingUrl("imeituan://unknown-host/xxx"))
         assertNull(SchemeUrlExtractor.extractLandingUrl(""))
+    }
+
+    // ── v0.8.4：MeituanEvokeResolver —— 唤起页 poiId 提取（真实跳转链数据）──
+
+    @Test
+    fun `evoke page poi h5 url extracted from real redirect chain`() {
+        // 2026-09 实测 dpurl.cn/cgDhxzyz 的真实跳转链：
+        // 302 → https://w.dianping.com/cube/evoke/meituan.html?url=imeituan%3A%2F%2F...poiId%3D1475979044...
+        val evokeUrl = "https://w.dianping.com/cube/evoke/meituan.html?url=imeituan%3A%2F%2Fwww.meituan.com%2Fmrn%3Fmrn_biz%3Dmeishi%26mrn_entry%3Dfood-poi%26mrn_component%3Dfood-poi%26poiId%3D1475979044%26poiIdEncrypt%3DqB4r177c7fa207bf95e364a737925473600ee8e63d7684a26106e19f7129f9272bd6cd6c1ba1daedb6bc7d73647c5ff6vxu5&utm_source=appshare&utm_fromapp=more"
+        assertEquals(
+            "https://www.meituan.com/meishi/1475979044/",
+            MeituanEvokeResolver.extractPoiH5Url(evokeUrl)
+        )
+    }
+
+    @Test
+    fun `evoke page detection and negative cases`() {
+        assertTrue(MeituanEvokeResolver.isEvokePage("https://w.dianping.com/cube/evoke/meituan.html?url=x"))
+        assertTrue(MeituanEvokeResolver.isEvokePage("https://cube.dianping.com/cube/evoke/dianping.html"))
+        assertFalse(MeituanEvokeResolver.isEvokePage("https://m.dianping.com/shop/123"))
+        assertFalse(MeituanEvokeResolver.isEvokePage("https://www.meituan.com/meishi/1475979044/"))
+        // 非唤起页 / 空 → null
+        assertNull(MeituanEvokeResolver.extractPoiH5Url("https://m.dianping.com/shop/123"))
+        assertNull(MeituanEvokeResolver.extractPoiH5Url(""))
+        // 唤起页但 url 参数无 poiId → null
+        assertNull(MeituanEvokeResolver.extractPoiH5Url("https://w.dianping.com/cube/evoke/meituan.html?url=imeituan%3A%2F%2Fwww.meituan.com%2Fother%3Ffoo%3Dbar"))
+    }
+
+    @Test
+    fun `poi id extracted from imeituan scheme`() {
+        assertEquals("1475979044", MeituanEvokeResolver.extractPoiId("imeituan://www.meituan.com/mrn?mrn_biz=meishi&poiId=1475979044&x=1"))
+        assertNull(MeituanEvokeResolver.extractPoiId("imeituan://www.meituan.com/mrn?mrn_biz=meishi"))
+        assertNull(MeituanEvokeResolver.extractPoiId("imeituan://www.meituan.com/mrn"))
+    }
+
+    // ── v0.8.4：短链平台识别改为文本特征优先 ──
+
+    @Test
+    fun `meituan text with dianping short link maps to meituan`() {
+        // 用户真实案例：@美团 + dpurl.cn 短链 → 应识别为美团
+        // （v0.8.3 曾因短链域名硬映射被错判为大众点评，显示「来自大众点评的分享」）
+        assertEquals(
+            SourcePlatform.MEITUAN,
+            PlatformRecognizer.detect(
+                null,
+                "http://dpurl.cn/cgDhxzyz",
+                "【地址:番禺区汉溪大道东182号长隆时代cr8第二层自编209】【电话:020-84825827】@美团`http://dpurl.cn/cgDhxzyz`"
+            )
+        )
+    }
+
+    @Test
+    fun `dianping text with short link maps to dianping`() {
+        assertEquals(
+            SourcePlatform.DIANPING,
+            PlatformRecognizer.detect(null, "http://dpurl.cn/abc", "大众点评分享了这家店 http://dpurl.cn/abc")
+        )
+        // 包名仍然最高优先
+        assertEquals(
+            SourcePlatform.MEITUAN,
+            PlatformRecognizer.detect("com.sankuai.meituan", "http://dpurl.cn/cgDhxzyz", "来自大众点评的分享")
+        )
     }
 }

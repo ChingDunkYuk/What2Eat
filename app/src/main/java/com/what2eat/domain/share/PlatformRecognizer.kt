@@ -7,6 +7,10 @@ import java.util.Locale
  * 分享来源识别（轻量，不依赖平台私有 API）。
  *
  * 依据 sourcePackage、URL host、分享文本特征识别平台。
+ *
+ * v0.8.4：短链域名（dpurl.cn/tb.htuiot.com）降级为无文本特征时的兜底——
+ * 美团/点评互相使用对方短链域名的情形常见（如美团分享用 dpurl.cn），
+ * 短链域名归属不可靠，文本特征（如「@美团」）优先于短链域名。
  */
 object PlatformRecognizer {
 
@@ -19,20 +23,22 @@ object PlatformRecognizer {
         "com.android.browser" to SourcePlatform.BROWSER
     )
 
-    // 域名 → 平台
+    // 域名 → 平台（非短链域名，归属可信，直接采用）
     private val hostMap = mapOf(
         "www.dianping.com" to SourcePlatform.DIANPING,
         "m.dianping.com" to SourcePlatform.DIANPING,
-        // v0.8.3：点评系短链域名（美团分享模板常用 dpurl.cn 跳转点评 H5）
-        "dpurl.cn" to SourcePlatform.DIANPING,
         "www.meituan.com" to SourcePlatform.MEITUAN,
         "m.meituan.com" to SourcePlatform.MEITUAN,
-        // v0.8.3：美团系短链域名（分享短信/模板常见）
-        "tb.htuiot.com" to SourcePlatform.MEITUAN,
         "www.amap.com" to SourcePlatform.AMAP,
         "uri.amap.com" to SourcePlatform.AMAP,
         "map.baidu.com" to SourcePlatform.BAIDU_MAP,
         "j.map.baidu.com" to SourcePlatform.BAIDU_MAP
+    )
+
+    // 短链域名 → 默认归属（美团/点评互用对方短链，仅在文本无特征时兜底）
+    private val shortLinkHostMap = mapOf(
+        "dpurl.cn" to SourcePlatform.DIANPING,
+        "tb.htuiot.com" to SourcePlatform.MEITUAN
     )
 
     /** 检测来源平台。 */
@@ -41,18 +47,23 @@ object PlatformRecognizer {
         sourcePackage?.let { pkg ->
             packageMap[pkg]?.let { return it }
         }
-        // 2. URL host
+        // 2. URL host（非短链域名，可信）
         url?.let { u ->
             val host = hostOf(u)
             hostMap[host]?.let { return it }
         }
-        // 3. 文本特征（兜底）
+        // 3. 文本特征（短链场景的主要判据，如「@美团`http://dpurl.cn/xxx`」）
         val t = rawText.orEmpty()
         if (t.contains("大众点评") || t.contains("dianping")) return SourcePlatform.DIANPING
         if (t.contains("美团") || t.contains("meituan")) return SourcePlatform.MEITUAN
         if (t.contains("高德") || t.contains("amap")) return SourcePlatform.AMAP
         if (t.contains("百度地图") || t.contains("baidu")) return SourcePlatform.BAIDU_MAP
-        // 4. 有 URL 且其它应用分享 → 浏览器
+        // 4. 短链域名兜底归属（文本无特征时）
+        url?.let { u ->
+            val host = hostOf(u)
+            shortLinkHostMap[host]?.let { return it }
+        }
+        // 5. 有 URL 且其它应用分享 → 浏览器
         if (!url.isNullOrBlank()) return SourcePlatform.BROWSER
         return SourcePlatform.OTHER
     }

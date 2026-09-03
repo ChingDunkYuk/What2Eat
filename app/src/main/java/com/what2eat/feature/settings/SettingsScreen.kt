@@ -1,4 +1,4 @@
-package com.what2eat.feature.settings
+﻿package com.what2eat.feature.settings
 
 import com.what2eat.core.designsystem.icon.What2EatIcons
 
@@ -225,7 +225,7 @@ private fun SettingsContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
-            text = stringResource(R.string.settings_version, "0.8.3"),
+            text = stringResource(R.string.settings_version, "0.8.4"),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
