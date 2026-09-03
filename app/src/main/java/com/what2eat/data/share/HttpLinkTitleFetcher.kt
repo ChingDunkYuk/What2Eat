@@ -16,12 +16,12 @@ import kotlin.math.min
 /**
  * HttpURLConnection 版链接标题抓取（无第三方依赖）。
  *
- * - 手动跟随重定向（覆盖 http↔https 协议切换），上限 5 次
- *   （v0.8.2：美团短链常 3 跳以上：短链 → 中转 → App 唤起页/落地页）
+ * - 手动跟随重定向（覆盖 http↔https 协议切换）
  * - v0.8.2：重定向到 App 唤起 scheme（imeituan:// 等）时，提取落地 https 页继续抓
  * - v0.8.2：补 Referer 头（部分平台对无 Referer 请求返回 403）
- * - v0.8.4：落到唤起页（title 为纯平台名）时，从唤起页 URL 提取 poiId，
- *   自动构造美团美食 POI H5 页二次抓取（真机网络环境可拿到店名 title）
+ * - v0.8.4：落到唤起页（title 为纯平台名）时，从唤起页 URL 提取 poiId 构造 POI 页二次抓取
+ * - v0.8.5：POI 候选页升级为队列（点评 H5 店铺页优先、美团 POI 页次之），
+ *   单候选失败自动尝试下一个；总请求数有上限
  * - 移动端 UA（移动版页面更轻、标题更完整）
  * - 流式读取上限 64KB 或读到 </title> 即停（美团页面体积大，无需全量下载）
  * - 一切异常 → null（调用方静默回退手动填写，不阻塞不报错）
@@ -33,51 +33,55 @@ class HttpLinkTitleFetcher @Inject constructor() : LinkTitleFetcher {
         runCatching { fetchInternal(url) }.getOrNull()
     }
 
+    /**
+     * 候选队列抓取：短链 → 唤起页 → POI 候选页依次尝试，直到拿到有效标题。
+     * 每条候选各自跟随重定向；整体请求数受 [MAX_TOTAL_REQUESTS] 约束。
+     */
     private fun fetchInternal(startUrl: String): String? {
-        var current = startUrl
-        var poiRetryDone = false
-        repeat(MAX_REDIRECTS) {
-            val conn = (URL(current).openConnection() as HttpURLConnection).apply {
-                connectTimeout = TIMEOUT_MS
-                readTimeout = TIMEOUT_MS
-                instanceFollowRedirects = false
-                setRequestProperty("User-Agent", MOBILE_UA)
-                setRequestProperty("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
-                setRequestProperty("Accept-Encoding", "identity")
-                setRequestProperty("Referer", "https://www.meituan.com/")
-            }
-            try {
-                when (conn.responseCode) {
-                    in 300..399 -> {
-                        val location = conn.getHeaderField("Location") ?: return null
-                        if (location.startsWith("http://", true) || location.startsWith("https://", true)) {
-                            // 相对/绝对地址基于当前 URL 解析
-                            current = URL(URL(current), location).toString()
-                        } else {
-                            // App 唤起 scheme（imeituan:// 等）→ 尝试提取落地 https 页，提取不到放弃
-                            current = SchemeUrlExtractor.extractLandingUrl(location) ?: return null
-                        }
-                    }
-                    HttpURLConnection.HTTP_OK -> {
-                        val title = readTitle(conn)
-                        if (title != null) return title
-                        // v0.8.4：唤起页标题无效（纯平台名/空）→ 提取 poiId 二次抓 POI H5 页
-                        if (!poiRetryDone && MeituanEvokeResolver.isEvokePage(current)) {
-                            val poiUrl = MeituanEvokeResolver.extractPoiH5Url(current)
-                            if (poiUrl != null) {
-                                poiRetryDone = true
-                                current = poiUrl
-                            } else {
-                                return null
-                            }
-                        } else {
-                            return null
-                        }
-                    }
-                    else -> return null
+        val queue = ArrayDeque<String>()
+        queue.add(startUrl)
+        var requests = 0
+
+        while (queue.isNotEmpty() && requests < MAX_TOTAL_REQUESTS) {
+            var current = queue.removeFirst()
+            // 单条候选：跟随重定向直到拿到页面或断链
+            while (requests < MAX_TOTAL_REQUESTS) {
+                requests++
+                val conn = (URL(current).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = TIMEOUT_MS
+                    readTimeout = TIMEOUT_MS
+                    instanceFollowRedirects = false
+                    setRequestProperty("User-Agent", MOBILE_UA)
+                    setRequestProperty("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
+                    setRequestProperty("Accept-Encoding", "identity")
+                    setRequestProperty("Referer", "https://www.meituan.com/")
                 }
-            } finally {
-                conn.disconnect()
+                try {
+                    when (conn.responseCode) {
+                        in 300..399 -> {
+                            val location = conn.getHeaderField("Location") ?: break
+                            current = if (location.startsWith("http://", true) || location.startsWith("https://", true)) {
+                                // 相对/绝对地址基于当前 URL 解析
+                                URL(URL(current), location).toString()
+                            } else {
+                                // App 唤起 scheme（imeituan:// 等）→ 提取落地 https 页，提取不到断链
+                                SchemeUrlExtractor.extractLandingUrl(location) ?: break
+                            }
+                        }
+                        HttpURLConnection.HTTP_OK -> {
+                            val title = readTitle(conn)
+                            if (title != null) return title
+                            // 唤起页标题无效（纯平台名/空/验证页）→ POI 候选页入队，继续外层循环
+                            if (MeituanEvokeResolver.isEvokePage(current)) {
+                                MeituanEvokeResolver.extractPoiH5Urls(current).forEach { queue.add(it) }
+                            }
+                            break
+                        }
+                        else -> break
+                    }
+                } finally {
+                    conn.disconnect()
+                }
             }
         }
         return null
@@ -134,7 +138,8 @@ class HttpLinkTitleFetcher @Inject constructor() : LinkTitleFetcher {
 
     private companion object {
         const val TIMEOUT_MS = 5_000
-        const val MAX_REDIRECTS = 5
+        /** 总请求预算：短链(1) + 唤起页(1) + 候选页各自含重定向(约 2×2) + 余量 */
+        const val MAX_TOTAL_REQUESTS = 8
         const val MAX_READ_BYTES = 64 * 1024
         const val MOBILE_UA =
             "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"

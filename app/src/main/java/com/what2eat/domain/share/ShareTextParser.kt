@@ -272,9 +272,12 @@ object ShareTextParser {
         return null
     }
 
+    /** 反爬验证页标题特征（v0.8.5：命中即拒绝，避免「身份核实」等验证页标题被当店名） */
+    private val captchaTitleRegex = Regex("""身份核实|安全验证|人机验证|滑动验证|验证中心""")
+
     /**
      * 网页 <title> 清洗（供链接标题抓取复用）：
-     * 空/URL/元信息/纯平台名 → null；复用 [cleanTitle] 净化与 [looksLikeMetadata] 护栏。
+     * 空/URL/元信息/纯平台名/反爬验证页 → null；复用 [cleanTitle] 净化与 [looksLikeMetadata] 护栏。
      */
     fun cleanWebTitle(raw: String): String? {
         if (raw.isBlank()) return null
@@ -282,6 +285,7 @@ object ShareTextParser {
         if (cleaned.length < 2 || cleaned.startsWith("http")) return null
         if (looksLikeMetadata(cleaned)) return null
         if (cleaned in platformTags) return null
+        if (captchaTitleRegex.containsMatchIn(cleaned)) return null
         return cleaned
     }
 

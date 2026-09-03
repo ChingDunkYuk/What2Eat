@@ -18,6 +18,7 @@ import org.junit.Test
  * 名称解析失败时原文进备注（诊断通道）。
  * v0.8.3：反引号包裹链接（真实美团分享模板）。
  * v0.8.4：唤起页 poiId 提取（构造 POI H5 二次抓取）、短链域名平台识别改为文本特征优先。
+ * v0.8.5：POI 候选页列表（点评 H5 优先）、反爬验证页标题护栏。
  */
 class ShareImportHardeningTest {
 
@@ -140,6 +141,17 @@ class ShareImportHardeningTest {
         assertNull(ShareTextParser.cleanWebTitle("  "))
     }
 
+    // ── v0.8.5：反爬验证页标题护栏 ──
+
+    @Test
+    fun `web title rejects captcha page titles`() {
+        // 实测 m.dianping.com 反爬页（2026-09）：title 为「身份核实」
+        assertNull(ShareTextParser.cleanWebTitle("身份核实"))
+        assertNull(ShareTextParser.cleanWebTitle("安全验证"))
+        assertNull(ShareTextParser.cleanWebTitle("人机验证 - 请完成验证后继续访问"))
+        assertNull(ShareTextParser.cleanWebTitle("滑动验证"))
+    }
+
     // ── HtmlTitleExtractor：HTML 标题提取 ──
 
     @Test
@@ -166,6 +178,8 @@ class ShareImportHardeningTest {
         assertNull(HtmlTitleExtractor.parseTitle("<title>美团</title>"))
         assertNull(HtmlTitleExtractor.parseTitle("<title>地址：番禺区</title>"))
         assertNull(HtmlTitleExtractor.parseTitle(""))
+        // v0.8.5：验证页标题同样拒绝
+        assertNull(HtmlTitleExtractor.parseTitle("<title>身份核实</title>"))
     }
 
     @Test
@@ -338,16 +352,20 @@ class ShareImportHardeningTest {
         assertNull(SchemeUrlExtractor.extractLandingUrl(""))
     }
 
-    // ── v0.8.4：MeituanEvokeResolver —— 唤起页 poiId 提取（真实跳转链数据）──
+    // ── v0.8.4/v0.8.5：MeituanEvokeResolver —— 唤起页 poiId 提取（真实跳转链数据）──
 
     @Test
-    fun `evoke page poi h5 url extracted from real redirect chain`() {
+    fun `evoke page poi h5 urls extracted from real redirect chain`() {
         // 2026-09 实测 dpurl.cn/cgDhxzyz 的真实跳转链：
         // 302 → https://w.dianping.com/cube/evoke/meituan.html?url=imeituan%3A%2F%2F...poiId%3D1475979044...
         val evokeUrl = "https://w.dianping.com/cube/evoke/meituan.html?url=imeituan%3A%2F%2Fwww.meituan.com%2Fmrn%3Fmrn_biz%3Dmeishi%26mrn_entry%3Dfood-poi%26mrn_component%3Dfood-poi%26poiId%3D1475979044%26poiIdEncrypt%3DqB4r177c7fa207bf95e364a737925473600ee8e63d7684a26106e19f7129f9272bd6cd6c1ba1daedb6bc7d73647c5ff6vxu5&utm_source=appshare&utm_fromapp=more"
+        // v0.8.5：候选页列表，点评 H5 店铺页优先（美团/点评 POI 互通）
         assertEquals(
-            "https://www.meituan.com/meishi/1475979044/",
-            MeituanEvokeResolver.extractPoiH5Url(evokeUrl)
+            listOf(
+                "https://m.dianping.com/shop/1475979044",
+                "https://www.meituan.com/meishi/1475979044/"
+            ),
+            MeituanEvokeResolver.extractPoiH5Urls(evokeUrl)
         )
     }
 
@@ -357,11 +375,15 @@ class ShareImportHardeningTest {
         assertTrue(MeituanEvokeResolver.isEvokePage("https://cube.dianping.com/cube/evoke/dianping.html"))
         assertFalse(MeituanEvokeResolver.isEvokePage("https://m.dianping.com/shop/123"))
         assertFalse(MeituanEvokeResolver.isEvokePage("https://www.meituan.com/meishi/1475979044/"))
-        // 非唤起页 / 空 → null
-        assertNull(MeituanEvokeResolver.extractPoiH5Url("https://m.dianping.com/shop/123"))
-        assertNull(MeituanEvokeResolver.extractPoiH5Url(""))
-        // 唤起页但 url 参数无 poiId → null
-        assertNull(MeituanEvokeResolver.extractPoiH5Url("https://w.dianping.com/cube/evoke/meituan.html?url=imeituan%3A%2F%2Fwww.meituan.com%2Fother%3Ffoo%3Dbar"))
+        // 非唤起页 / 空 → 空列表
+        assertTrue(MeituanEvokeResolver.extractPoiH5Urls("https://m.dianping.com/shop/123").isEmpty())
+        assertTrue(MeituanEvokeResolver.extractPoiH5Urls("").isEmpty())
+        // 唤起页但 url 参数无 poiId → 空列表
+        assertTrue(
+            MeituanEvokeResolver.extractPoiH5Urls(
+                "https://w.dianping.com/cube/evoke/meituan.html?url=imeituan%3A%2F%2Fwww.meituan.com%2Fother%3Ffoo%3Dbar"
+            ).isEmpty()
+        )
     }
 
     @Test

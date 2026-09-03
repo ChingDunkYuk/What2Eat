@@ -14,8 +14,10 @@ import java.net.URLDecoder
  *   → 302 → https://w.dianping.com/cube/evoke/meituan.html?url=imeituan%3A%2F%2Fwww.meituan.com%2Fmrn%3F...%26poiId%3D1475979044%26...
  *   → 200（title="美团"，无店名数据）
  *
- * 本解析器从唤起页 URL 提取 poiId，构造美团美食 POI H5 页
- * （https://www.meituan.com/meishi/{poiId}/，title 即店名）供标题抓取二次访问。
+ * 本解析器从唤起页 URL 提取 poiId，构造店铺 H5 页候选列表供标题抓取依次访问。
+ *
+ * v0.8.5：候选页升级为列表（点评 H5 店铺页优先）——美团/点评 POI 数据互通
+ * （唤起页托管在 dianping.com、反爬页资源在 meituan.net，双端统一基建），poiId 通用。
  */
 object MeituanEvokeResolver {
 
@@ -30,17 +32,19 @@ object MeituanEvokeResolver {
         url.isNotBlank() && evokePageRegex.containsMatchIn(url.trim())
 
     /**
-     * 从唤起页 URL 提取美团美食 POI H5 页地址。
+     * 从唤起页 URL 提取店铺 H5 页候选列表（按优先级排序，v0.8.5）。
      *
      * 解析：query 的 url 参数（URL 编码的 imeituan:// scheme）→ 解码 → 提取 poiId
-     * → https://www.meituan.com/meishi/{poiId}/
+     * → 候选页：
+     * 1. https://m.dianping.com/shop/{poiId} —— 点评 H5 店铺页（标题即店名）
+     * 2. https://www.meituan.com/meishi/{poiId}/ —— 美团美食 POI 页（部分网络被风控）
      *
-     * @return POI H5 页 URL；非唤起页 / 无 url 参数 / 无 poiId 时返回 null
+     * @return 候选 URL 列表；非唤起页 / 无 url 参数 / 无 poiId 时为空列表
      */
-    fun extractPoiH5Url(evokeUrl: String): String? {
-        if (!isEvokePage(evokeUrl)) return null
+    fun extractPoiH5Urls(evokeUrl: String): List<String> {
+        if (!isEvokePage(evokeUrl)) return emptyList()
         val query = evokeUrl.substringAfter('?', "")
-        if (query.isEmpty()) return null
+        if (query.isEmpty()) return emptyList()
         for (pair in query.split('&')) {
             val key = pair.substringBefore('=').trim()
             if (key != "url") continue
@@ -48,9 +52,12 @@ object MeituanEvokeResolver {
             if (encoded.isEmpty()) continue
             val scheme = runCatching { URLDecoder.decode(encoded, "UTF-8") }.getOrNull() ?: continue
             val poiId = extractPoiId(scheme) ?: continue
-            return "https://www.meituan.com/meishi/$poiId/"
+            return listOf(
+                "https://m.dianping.com/shop/$poiId",
+                "https://www.meituan.com/meishi/$poiId/"
+            )
         }
-        return null
+        return emptyList()
     }
 
     /** 从 imeituan:// scheme URL 的 query 中提取 poiId 参数。 */
