@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.what2eat.domain.share.ShareTextParser
@@ -13,6 +14,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayInputStream
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,6 +25,15 @@ import javax.inject.Singleton
  * 为什么需要它：美团/点评店铺页是 SPA——<title> 由 JS 在客户端渲染，
  * 纯 HttpURLConnection 永远拿不到（空标签）；且 WebView 自带 Cookie、
  * 真实浏览器指纹与 JS 执行环境，反爬验证的通过率也远高于裸 HTTP。
+ *
+ * v0.8.7 修复「抓标题时跳回美团 App」：
+ * 美团/点评页面的 JS 会用 **iframe src=imeituan://...** 的方式唤起 App——
+ * iframe 子资源加载不经过 [WebViewClient.shouldOverrideUrlLoading]，
+ * WebView 网络层遇到未知 scheme 会直接发系统 Intent 把美团拉起。
+ * 双层拦截：
+ * 1. [WebViewClient.shouldOverrideUrlLoading]：拦主导航（location.href / 链接点击）
+ * 2. [WebViewClient.shouldInterceptRequest]：拦 iframe / 302 重定向目标里的自定义
+ *    scheme，吞成空响应——覆盖 iframe 唤起与服务端重定向两条逃逸路径。
  *
  * 流程：主线程创建 WebView（不 attach 到任何视图）→ loadUrl →
  * [WebChromeClient.onReceivedTitle] 捕获标题（SPA 会多次回调：占位标题 → 真实店名）→
@@ -51,13 +62,32 @@ class WebViewTitleFetcher @Inject constructor(
             // 只取标题，不加载图片（省流量、提速）
             settings.loadsImagesAutomatically = false
             settings.blockNetworkImage = true
+            // 不允许 JS 自动弹窗（window.open 自动唤起路径一并关闭）
+            settings.javaScriptCanOpenWindowsAutomatically = false
+            settings.setSupportMultipleWindows(false)
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(
                     view: WebView,
                     request: WebResourceRequest
                 ): Boolean {
-                    // 拦截 App 唤起 scheme（imeituan:// 等），停留在网页侧继续等标题
+                    // 拦截层 1（主导航）：App 唤起 scheme（imeituan:// 等）不导航，
+                    // 停留在网页侧继续等标题
                     return !request.url.toString().startsWith("http")
+                }
+
+                override fun shouldInterceptRequest(
+                    view: WebView,
+                    request: WebResourceRequest
+                ): WebResourceResponse? {
+                    // 拦截层 2（iframe / 重定向目标）：自定义 scheme 吞成空响应，
+                    // 阻断 WebView 网络层对未知 scheme 发 Intent（v0.8.7 跳美团根因）
+                    val scheme = request.url.scheme ?: return null
+                    val isHttp = scheme.equals("http", ignoreCase = true) ||
+                        scheme.equals("https", ignoreCase = true)
+                    if (isHttp) return null
+                    return WebResourceResponse(
+                        "text/plain", "utf-8", ByteArrayInputStream(ByteArray(0))
+                    )
                 }
             }
             webChromeClient = object : WebChromeClient() {

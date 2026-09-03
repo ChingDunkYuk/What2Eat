@@ -1,4 +1,4 @@
-plugins {
+﻿plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -14,8 +14,8 @@ android {
         applicationId = "com.what2eat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 22
-        versionName = "0.8.6"
+        versionCode = 23
+        versionName = "0.8.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
