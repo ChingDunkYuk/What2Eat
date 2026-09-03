@@ -1,9 +1,11 @@
 package com.what2eat.data.share
 
+import android.content.Context
 import com.what2eat.domain.share.HtmlTitleExtractor
 import com.what2eat.domain.share.LinkTitleFetcher
 import com.what2eat.domain.share.MeituanEvokeResolver
 import com.what2eat.domain.share.SchemeUrlExtractor
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -14,32 +16,47 @@ import javax.inject.Singleton
 import kotlin.math.min
 
 /**
- * HttpURLConnection 版链接标题抓取（无第三方依赖）。
+ * 链接标题抓取（无第三方依赖）：两阶段策略（v0.8.6）。
  *
+ * 阶段一 HttpURLConnection 轻量链路（省流量、快）：
  * - 手动跟随重定向（覆盖 http↔https 协议切换）
- * - v0.8.2：重定向到 App 唤起 scheme（imeituan:// 等）时，提取落地 https 页继续抓
- * - v0.8.2：补 Referer 头（部分平台对无 Referer 请求返回 403）
- * - v0.8.4：落到唤起页（title 为纯平台名）时，从唤起页 URL 提取 poiId 构造 POI 页二次抓取
- * - v0.8.5：POI 候选页升级为队列（点评 H5 店铺页优先、美团 POI 页次之），
- *   单候选失败自动尝试下一个；总请求数有上限
- * - 移动端 UA（移动版页面更轻、标题更完整）
- * - 流式读取上限 64KB 或读到 </title> 即停（美团页面体积大，无需全量下载）
- * - 一切异常 → null（调用方静默回退手动填写，不阻塞不报错）
+ * - App 唤起 scheme（imeituan://）→ 提取落地 https 页继续
+ * - 唤起页标题无效（纯平台名）→ poiId 构造候选页入队（点评 H5 优先、美团 POI 页次之）
+ * - 反爬验证页标题（「身份核实」等）由 domain 层护栏拒绝
+ *
+ * 阶段二 WebView 兜底（阶段一全空时）：
+ * - 真实浏览器内核执行 JS——美团/点评店铺页标题为 SPA 客户端渲染，
+ *   纯 HTTP 抓到的 <title> 常为空，这是此前美团链接拿不到店名的关键原因；
+ * - 自带 Cookie 与浏览器指纹，反爬通过率显著高于裸 HTTP；
+ * - 目标依次为：阶段一派生的候选页（美团唤起链）或原链接（普通分享）。
+ *
+ * 一切异常 → null（调用方静默回退手动填写，不阻塞不报错）。
  */
 @Singleton
-class HttpLinkTitleFetcher @Inject constructor() : LinkTitleFetcher {
+class HttpLinkTitleFetcher @Inject constructor(
+    @ApplicationContext private val appContext: Context,
+    private val webViewTitleFetcher: WebViewTitleFetcher
+) : LinkTitleFetcher {
 
     override suspend fun fetchTitle(url: String): String? = withContext(Dispatchers.IO) {
-        runCatching { fetchInternal(url) }.getOrNull()
+        val (httpTitle, candidates) = resolveHttp(url)
+        if (httpTitle != null) return@withContext httpTitle
+        // 阶段二：WebView 兜底（候选页优先；普通分享则用原链接）
+        val targets = if (candidates.isEmpty()) listOf(url) else candidates
+        targets.firstNotNullOfOrNull { target ->
+            runCatching { webViewTitleFetcher.fetchTitle(target) }.getOrNull()
+        }
     }
 
     /**
-     * 候选队列抓取：短链 → 唤起页 → POI 候选页依次尝试，直到拿到有效标题。
-     * 每条候选各自跟随重定向；整体请求数受 [MAX_TOTAL_REQUESTS] 约束。
+     * 阶段一：轻量 HTTP 解析。
+     *
+     * @return (有效标题 or null，唤起页派生的候选页列表)
      */
-    private fun fetchInternal(startUrl: String): String? {
+    private fun resolveHttp(startUrl: String): Pair<String?, List<String>> {
         val queue = ArrayDeque<String>()
         queue.add(startUrl)
+        val candidates = mutableListOf<String>()
         var requests = 0
 
         while (queue.isNotEmpty() && requests < MAX_TOTAL_REQUESTS) {
@@ -64,16 +81,19 @@ class HttpLinkTitleFetcher @Inject constructor() : LinkTitleFetcher {
                                 // 相对/绝对地址基于当前 URL 解析
                                 URL(URL(current), location).toString()
                             } else {
-                                // App 唤起 scheme（imeituan:// 等）→ 提取落地 https 页，提取不到断链
+                                // App 唤起 scheme → 提取落地 https 页，提取不到断链
                                 SchemeUrlExtractor.extractLandingUrl(location) ?: break
                             }
                         }
                         HttpURLConnection.HTTP_OK -> {
                             val title = readTitle(conn)
-                            if (title != null) return title
-                            // 唤起页标题无效（纯平台名/空/验证页）→ POI 候选页入队，继续外层循环
+                            if (title != null) return title to candidates
+                            // 唤起页标题无效（纯平台名/空/验证页）→ 候选页入队，继续外层循环
                             if (MeituanEvokeResolver.isEvokePage(current)) {
-                                MeituanEvokeResolver.extractPoiH5Urls(current).forEach { queue.add(it) }
+                                MeituanEvokeResolver.extractPoiH5Urls(current).forEach {
+                                    if (it !in candidates) candidates.add(it)
+                                    queue.add(it)
+                                }
                             }
                             break
                         }
@@ -84,7 +104,7 @@ class HttpLinkTitleFetcher @Inject constructor() : LinkTitleFetcher {
                 }
             }
         }
-        return null
+        return null to candidates
     }
 
     private fun readTitle(conn: HttpURLConnection): String? {
