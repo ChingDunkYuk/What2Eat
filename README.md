@@ -1,4 +1,7 @@
 # What2Eat
+<img width="400" height="800" alt="image" src="https://github.com/user-attachments/assets/b9645183-2109-4811-92d5-4863951ab6e8" />
+<img width="400" height="800" alt="image" src="https://github.com/user-attachments/assets/97a10d33-ab5d-4b2e-aa4f-5f6d7eb527a3" />
+
 
 > 一款帮助情侣共同决定“今晚吃什么”的 Android 应用。  
 > An Android app that helps couples decide what to eat together.
