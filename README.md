@@ -201,19 +201,30 @@ What2Eat does not depend on any single third-party platform.
 
 ## 当前开发进度 / Development Status
 
-| Stage | 内容 / Feature | 状态 |
+## 当前开发进度 / Development Status
+
+| Version / Stage | 内容 / Feature | 状态 |
 |---|---|---|
 | Stage 0.1 | 项目骨架 / Project Foundation | ✅ |
 | Stage 1.1 | 双人物档案与长期偏好 / Profiles & Preferences | ✅ |
 | Stage 2.1 | 本次决策输入 / Decision Input | ✅ |
 | Stage 2.2 | 推荐引擎 / Recommendation Engine | ✅ |
 | Stage 3.1 | 通用搜索承接 / Generic Search Handoff | ✅ |
-| Stage 3.2 | 大众点评 / 美团承接 | ✅ |
+| Stage 3.2 | 大众点评 / 美团承接 / Platform Handoff | ✅ |
 | Stage 4 | 我的吃饭池 / Food Pool | ✅ |
-| Stage 5 | Android Share Intent 导入 | 🚧 |
-| Stage 6 | 从吃饭池决定 / Food Pool Recommendation | ⏳ |
-| Stage 7 | 历史、反馈与备份 / History & Backup | ⏳ |
-| Stage 8 | Release Candidate / v1.0 | ⏳ |
+| v0.7.x–0.8.x | Android 分享导入 / Share Import | ✅ |
+| v0.8.0 | 从吃饭池决定 / Food Pool Recommendation | ✅ |
+| v0.8.1 | 历史页升级 / History Upgrade | ✅ |
+| v0.9.0 | 体验补强 / UX Improvements | ✅ |
+| v0.9.1 | 性能优化 / Performance Optimization | ✅ |
+| v0.9.2 | 标签管理 / Tag Management | ✅ |
+| v0.9.3 | 数据备份与恢复 / Backup & Restore | ✅ |
+| v0.9.4 | UI 动效增强 / UI Motion Improvements | ✅ |
+| v1.0.0 | 首个 Release 基线 / First Release Baseline | ✅ |
+| v1.1.x | 美团店名识别强化 / Meituan Name Extraction Improvements | ✅ |
+| v1.2.0–v1.2.5 | 验证墙人工通过 + 抓取链完善 / Verification Flow & Share Parsing | ✅ |
+| v1.2.5 | 当前 Release Candidate | 🧪 真机最终回归中 |
+| v1.3.0 | 效率与统计增强 / Productivity & Statistics | 🗓️ Planned |
 
 ---
 
