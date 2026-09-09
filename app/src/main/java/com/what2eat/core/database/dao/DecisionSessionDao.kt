@@ -61,4 +61,15 @@ interface DecisionSessionDao {
 
     @Query("DELETE FROM decision_session WHERE id = :id")
     suspend fun delete(id: String)
+
+    // ── 备份/恢复（v0.9.3） ──
+
+    @Query("SELECT * FROM decision_session")
+    suspend fun getAll(): List<DecisionSessionEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(entities: List<DecisionSessionEntity>)
+
+    @Query("DELETE FROM decision_session")
+    suspend fun deleteAll()
 }

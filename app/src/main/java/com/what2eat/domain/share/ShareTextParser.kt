@@ -121,8 +121,10 @@ object ShareTextParser {
         val text = normalizeWhitespace(rawText?.trim().orEmpty())
         val url = UrlNormalizer.extractFirstUrl(text)
         val platform = PlatformRecognizer.detect(sourcePackage, url, text)
-        // 最后一道防线：任何路径产出的结果像元信息（地址/电话类）都不是店名
-        val name = extractName(text, subject, url)?.takeUnless { looksLikeMetadata(it) }
+        // 最后一道防线：任何路径产出的结果像元信息（地址/电话类）或平台模板文案都不是店名
+        val name = extractName(text, subject, url)
+            ?.takeUnless { looksLikeMetadata(it) }
+            ?.takeUnless { isPlatformTemplate(it) }
             // v0.8.2：文本解析不出时，从 URL query 店名参数兜底
             ?: url?.let { extractNameFromUrlQuery(it) }
         return ShareImportDraft(
@@ -151,10 +153,15 @@ object ShareTextParser {
      * 5. null（进入待整理，用兜底名占位）
      */
     fun extractName(rawText: String?, subject: String?, url: String?): String? {
-        // 1. subject（分享标题也可能是整句模板，需净化；地址/电话类元信息标题拒绝）
+        // 1. subject（分享标题也可能是整句模板，需净化；地址/电话类元信息/平台模板标题
+        //    拒绝后**继续走正文**——v0.8.16 修复：此前模板 subject 提前 return，
+        //    堵死了正文店名解析（真实案例：subject=「来自美团的分享」导致正文里的
+        //    「【文通冰室（时代长隆店）】」永远不被读取，名称栏空转后落到兜底名）
         subject?.let { s ->
             val clean = cleanTitle(normalizeWhitespace(s))
-            if (clean.length >= 2 && !clean.startsWith("http") && !looksLikeMetadata(clean)) return clean
+            if (clean.length >= 2 && !clean.startsWith("http") && !looksLikeMetadata(clean) &&
+                !isPlatformTemplate(clean)
+            ) return clean
         }
         val text = rawText?.let { normalizeWhitespace(it) }
         if (text != null) {
@@ -190,6 +197,8 @@ object ShareTextParser {
             if (cleaned.length < 2) continue
             // 截断残片（如「门店」）或地址电话类结果不是店名
             if (looksLikeMetadata(cleaned)) continue
+            // 平台模板文案（「来自美团的分享」等）不是店名（v0.8.13）
+            if (isPlatformTemplate(cleaned)) continue
 
             var score = 0
             if (hasBracketName(t)) score += 4
@@ -234,6 +243,25 @@ object ShareTextParser {
         }
     }
 
+    /**
+     * 平台分享模板文案（v0.8.13）：不是店名，命中即拒绝。
+     *
+     * 真实回归：美团分享的 EXTRA_SUBJECT 是「来自美团的分享」，正文也常含该行——
+     * 旧护栏全部穿透（cleanTitle 的「 来自」后缀剥离只处理「店名 来自xx」格式，
+     * 不处理以「来自」开头的整句），导致名称栏被填成模板文案，
+     * 且 detectedName 非空让链接标题抓取（真正的店名来源）根本不触发。
+     * 拒掉模板 → detectedName 为 null → 触发抓取补真名。
+     * 正则以「的分享/分享了」收尾，真店名（如「来自大自然的馈赠」）不受影响。
+     */
+    private val platformTemplateRegex = Regex(
+        """来自(?:美团|大众点评|点评|饿了么|口碑|高德(?:地图)?|百度地图)?的分享""" +
+            """|(?:美团|大众点评|点评)分享了(?:这家店|一家)"""
+    )
+
+    /** 是否为平台分享模板文案（供 extractName/createDraft/cleanWebTitle 三处护栏复用）。 */
+    internal fun isPlatformTemplate(text: String): Boolean =
+        platformTemplateRegex.containsMatchIn(normalizeWhitespace(text).trim())
+
     /** 提取「地址：/电话：/营业时间：」行（保持原文顺序）拼为备注；无则 null。 */
     fun extractInfoNotes(rawText: String?): String? {
         if (rawText.isNullOrBlank()) return null
@@ -273,20 +301,83 @@ object ShareTextParser {
     }
 
     /** 反爬验证页标题特征（v0.8.5：命中即拒绝，避免「身份核实」等验证页标题被当店名） */
-    private val captchaTitleRegex = Regex("""身份核实|安全验证|人机验证|滑动验证|验证中心""")
+    private val captchaTitleRegex = Regex("""身份核实|安全验证|人机验证|滑动验证|验证中心|登录环境异常|检测到当前登录环境异常""")
+
+    /**
+     * 登录页标题特征（v1.1.2：命中即拒绝）。
+     * SPA 数据接口 401 会把页面跳去 passport 登录页——「美团网账号登录-手机美团官网」
+     * 曾穿透全部护栏被当店名返回（还因返回非空短路了后续候选页）。
+     * v1.1.3 泛化为单字「登录」：i.meituan 的 mttouch 登录页标题只写「登录」也能漏网；
+     * 真实店名不可能含「登录」（本正则仅用于网页标题，不影响分享文本解析）。
+     */
+    private val loginTitleRegex = Regex("""登录""")
+
+    /**
+     * 站点/壳页标题（v0.8.9，**整串相等**才拒绝——不能用包含匹配，
+     * 否则误杀「店名_大众点评网」这类真实标题）：
+     * - 「大众点评网/美团网」——点评桌面店铺页 301 到登录页的 <title>
+     *   （v0.8.8 该标题穿透护栏被误当店名，用户名称栏被填「大众点评网」）；
+     * - 「商家详情/店铺详情」——meishi.meituan.com POI H5 的 SPA 壳固定标题；
+     * - 「页面不存在/加载失败」——无效 poiId 命中 404/错误页。
+     */
+    private val siteShellTitles = setOf(
+        "大众点评网", "美团网", "美团外卖网", "商家详情", "店铺详情", "页面不存在", "加载失败", "加载中"
+    )
+
+    /**
+     * 死路整串标题（v1.1.3）：这些页面连 DOM/接口都不可能出店名，命中即拒 + 快速失败。
+     * 「温馨提示」——static.meituan.net/bs/mbs-pages upgrader 升级提示页标题
+     * （meishi SPA 嫌 WebView「浏览器太旧」跳过去，曾穿透护栏被当店名返回）。
+     * 与 siteShellTitles 的区别：壳页（商家详情）只是标题无用、DOM 还可能出店名，不算死路。
+     */
+    private val deadEndTitles = setOf("温馨提示")
+
+    /**
+     * 通用落地页/营销页标题特征（包含匹配即拒绝，都不会出现在真实店名里）：
+     * v0.8.8：唤起页营销语、活动结束页、App 下载引导页；
+     * v0.8.9：美团 H5 账号安全检查页文案（无登录态时 POI 页渲染成该页）。
+     */
+    private val genericTitleRegex = Regex(
+        """问美团|都安排|和美团合作|活动已结束|打开App|下载App|打开美团|打开大众点评|下载美团|下载大众点评|是我的账号|不是我的账号"""
+    )
 
     /**
      * 网页 <title> 清洗（供链接标题抓取复用）：
-     * 空/URL/元信息/纯平台名/反爬验证页 → null；复用 [cleanTitle] 净化与 [looksLikeMetadata] 护栏。
+     * 空/URL/元信息/纯平台名/站点壳页/反爬验证页/营销落地页 → null；
+     * 复用 [cleanTitle] 净化与 [looksLikeMetadata] 护栏。
      */
+    /** URL 特征（无 http 前缀的裸域名/路径也算——v1.1.0 修复 dpurl.cn/xxx 穿透护栏被当店名） */
+    private val looksLikeUrlRegex = Regex(
+        """^(?:https?://)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:/\S*)?$""",
+        RegexOption.IGNORE_CASE
+    )
+
     fun cleanWebTitle(raw: String): String? {
         if (raw.isBlank()) return null
         val cleaned = cleanTitle(normalizeWhitespace(raw))
         if (cleaned.length < 2 || cleaned.startsWith("http")) return null
+        if (looksLikeUrlRegex.matches(cleaned.trim())) return null
         if (looksLikeMetadata(cleaned)) return null
+        if (isPlatformTemplate(cleaned)) return null
         if (cleaned in platformTags) return null
+        if (cleaned in siteShellTitles) return null
+        if (cleaned in deadEndTitles) return null
         if (captchaTitleRegex.containsMatchIn(cleaned)) return null
+        if (loginTitleRegex.containsMatchIn(cleaned)) return null
+        if (genericTitleRegex.containsMatchIn(cleaned)) return null
         return cleaned
+    }
+
+    /**
+     * 死路标题（v1.1.2）：反爬验证页/登录页——这些页面不可能产出店名，
+     * WebView 抓取命中即快速失败（不再空等到超时，单候选两次重试省约 20 秒）。
+     * 注意：SPA 壳页标题（商家详情等）不在此列——壳页的 DOM/数据接口仍可能出店名。
+     */
+    fun isDeadEndWebTitle(raw: String): Boolean {
+        if (raw.isBlank()) return false
+        val cleaned = cleanTitle(normalizeWhitespace(raw))
+        return cleaned in deadEndTitles ||
+            captchaTitleRegex.containsMatchIn(cleaned) || loginTitleRegex.containsMatchIn(cleaned)
     }
 
     /** 行内是否有有效的「」【】店名（排除平台标签）。 */

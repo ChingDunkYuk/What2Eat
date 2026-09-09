@@ -1,6 +1,7 @@
 package com.what2eat.domain.engine
 
 import com.what2eat.domain.model.BudgetLevel
+import com.what2eat.domain.model.DistanceLevel
 import com.what2eat.domain.model.MealMode
 import com.what2eat.domain.model.MoodTag
 
@@ -267,6 +268,48 @@ object CategoryRules {
             daysAgo <= 14 -> -15
             daysAgo <= 30 -> 0
             else -> 10
+        }
+    }
+
+    /**
+     * v0.9.0：距离偏好软评分（分类属性维度，无真实地理数据，与预算同模式）。
+     *
+     * 语义：
+     * - NEARBY_WALK / WITHIN_10_MIN（就近解决）：出餐快、随处可见的形态
+     *   （快餐/便利店/粉面/家常）+15；需专门赴店的重餐（火锅/烤肉/牛排/大餐）-15。
+     * - WITHIN_30_MIN：轻倾向就近，同上规则但减半。
+     * - FAR_OK（专程去吃）：反向——值得专程的重餐/约会向（火锅/烤肉/日料/牛排/
+     *   约会友好）+15；随便哪都有的快餐/便利店 -10。
+     * - UNLIMITED：0。
+     */
+    fun distanceScore(attributes: Set<CategoryAttribute>, distance: DistanceLevel): Int {
+        val quickForms = setOf(
+            CategoryAttribute.FAST_FOOD, CategoryAttribute.NOODLE,
+            CategoryAttribute.CONVENIENCE, CategoryAttribute.SMALL_PORTION
+        )
+        val destinationForms = setOf(
+            CategoryAttribute.HOTPOT, CategoryAttribute.BBQ, CategoryAttribute.STEAK,
+            CategoryAttribute.DATE_FRIENDLY, CategoryAttribute.HEAVY_MEAL
+        )
+        val isQuick = attributes.any { it in quickForms }
+        val isDestination = attributes.any { it in destinationForms }
+        return when (distance) {
+            DistanceLevel.UNLIMITED -> 0
+            DistanceLevel.NEARBY_WALK, DistanceLevel.WITHIN_10_MIN -> when {
+                isQuick -> 15
+                isDestination -> -15
+                else -> 0
+            }
+            DistanceLevel.WITHIN_30_MIN -> when {
+                isQuick -> 8
+                isDestination -> -8
+                else -> 0
+            }
+            DistanceLevel.FAR_OK -> when {
+                isDestination -> 15
+                isQuick -> -10
+                else -> 0
+            }
         }
     }
 }

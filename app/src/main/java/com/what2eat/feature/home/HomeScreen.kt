@@ -1,5 +1,8 @@
 package com.what2eat.feature.home
 
+import com.what2eat.core.designsystem.animation.bounceClickable
+import com.what2eat.core.designsystem.animation.entranceBounce
+import com.what2eat.core.designsystem.animation.gentleBob
 import com.what2eat.core.designsystem.icon.What2EatIcons
 
 import androidx.compose.foundation.background
@@ -21,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +48,7 @@ fun HomeScreen(
     onDecideFirstClick: () -> Unit,
     onPoolDecideClick: () -> Unit,
     onContinueSessionClick: () -> Unit = {},
+    onReviewClick: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -61,6 +66,18 @@ fun HomeScreen(
             stringResource(R.string.home_greeting_default)
         }
 
+        // 随机小文案：每次进入首页换一句，增添活泼感
+        val defaultSubtitle = stringResource(R.string.home_subtitle)
+        val subtitle = remember(defaultSubtitle) {
+            listOf(
+                defaultSubtitle,
+                "今天也想一起好好吃饭",
+                "选择困难？交给我就好啦",
+                "美味不等人，开饭啦",
+                "干饭人的快乐从决定开始"
+            ).random()
+        }
+
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -69,7 +86,9 @@ fun HomeScreen(
                 imageVector = What2EatIcons.Mascot,
                 contentDescription = null,
                 tint = Color.Unspecified,
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier
+                    .size(40.dp)
+                    .gentleBob()
             )
             Text(
                 text = greeting,
@@ -80,12 +99,15 @@ fun HomeScreen(
         }
 
         Text(
-            text = stringResource(R.string.home_subtitle),
+            text = subtitle,
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         Spacer(modifier = Modifier.height(8.dp))
+
+        // 交错入场：按可见顺序依次弹出
+        var nextEntranceDelay = 0
 
         // ── 继续本次决定（有活动会话时显示）──
         if (uiState.hasActiveSession) {
@@ -100,8 +122,24 @@ fun HomeScreen(
                 description = candidateDesc,
                 onClick = onContinueSessionClick,
                 containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                entranceDelayMillis = nextEntranceDelay
             )
+            nextEntranceDelay += 60
+        }
+
+        // ── 待整理提醒（v0.9.0：分享收件堆积会退出池决策，主动提醒整理）──
+        if (uiState.needsReviewCount > 0) {
+            EntryCard(
+                icon = What2EatIcons.PlayArrow,
+                title = "待整理 · ${uiState.needsReviewCount} 家店",
+                description = "整理好才会进入吃饭池参与推荐",
+                onClick = onReviewClick,
+                containerColor = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                entranceDelayMillis = nextEntranceDelay
+            )
+            nextEntranceDelay += 60
         }
 
         // ── 主入口卡片 ──
@@ -109,8 +147,10 @@ fun HomeScreen(
             icon = What2EatIcons.Category,
             title = stringResource(R.string.home_entry_decide_first),
             description = stringResource(R.string.home_entry_decide_first_desc),
-            onClick = onDecideFirstClick
+            onClick = onDecideFirstClick,
+            entranceDelayMillis = nextEntranceDelay
         )
+        nextEntranceDelay += 60
 
         EntryCard(
             icon = What2EatIcons.Restaurant,
@@ -118,13 +158,16 @@ fun HomeScreen(
             description = stringResource(R.string.home_entry_pool_desc),
             onClick = onPoolDecideClick,
             containerColor = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            entranceDelayMillis = nextEntranceDelay
         )
     }
 }
 
 /**
  * 主入口卡片组件。
+ *
+ * v0.9.4：入场弹跳（交错延迟）+ 按压缩放回弹。
  */
 @Composable
 private fun EntryCard(
@@ -133,11 +176,14 @@ private fun EntryCard(
     description: String,
     onClick: () -> Unit,
     containerColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primaryContainer,
-    contentColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onPrimaryContainer
+    contentColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onPrimaryContainer,
+    entranceDelayMillis: Int = 0
 ) {
     Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .entranceBounce(key = title, delayMillis = entranceDelayMillis)
+            .bounceClickable(onClick),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = containerColor,

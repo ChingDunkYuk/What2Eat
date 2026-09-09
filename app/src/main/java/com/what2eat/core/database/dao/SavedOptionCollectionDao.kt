@@ -33,4 +33,12 @@ interface SavedOptionCollectionDao {
 
     @Query("DELETE FROM saved_option_collection WHERE savedOptionId = :optionId AND collectionType = :collectionType")
     suspend fun delete(optionId: String, collectionType: Int)
+
+    // ── 备份/恢复（v0.9.3） ──
+
+    @Query("SELECT * FROM saved_option_collection")
+    suspend fun getAll(): List<SavedOptionCollectionEntity>
+
+    @Query("DELETE FROM saved_option_collection")
+    suspend fun deleteAll()
 }

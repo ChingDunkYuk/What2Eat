@@ -36,4 +36,15 @@ interface PersonCategoryPreferenceDao {
 
     @Query("DELETE FROM person_category_preference WHERE personId = :personId AND categoryId = :categoryId")
     suspend fun delete(personId: String, categoryId: String)
+
+    // ── 备份/恢复（v0.9.3） ──
+
+    @Query("SELECT * FROM person_category_preference")
+    suspend fun getAll(): List<PersonCategoryPreferenceEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(entities: List<PersonCategoryPreferenceEntity>)
+
+    @Query("DELETE FROM person_category_preference")
+    suspend fun deleteAll()
 }

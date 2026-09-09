@@ -59,4 +59,12 @@ interface PersonProfileDao {
 
     @Query("UPDATE session_participant SET personId = :newId WHERE personId = :oldId")
     suspend fun migrateParticipantPersonId(oldId: String, newId: String)
+
+    // ── 备份/恢复（v0.9.3） ──
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(entities: List<PersonProfileEntity>)
+
+    @Query("DELETE FROM person_profile")
+    suspend fun deleteAll()
 }

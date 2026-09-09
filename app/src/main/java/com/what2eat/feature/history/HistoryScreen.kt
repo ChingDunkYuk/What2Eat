@@ -156,7 +156,7 @@ fun HistoryScreen(
                             items(group.items, key = { it.sessionId }) { item ->
                                 HistoryCard(
                                     item = item,
-                                    onSearchAgain = { viewModel.showSearchPanel(item.categoryName) }
+                                    onSearchAgain = { viewModel.showSearchPanel(item.categoryName, item.areaText) }
                                 )
                             }
                         }

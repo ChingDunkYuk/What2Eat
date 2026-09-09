@@ -1,8 +1,13 @@
 package com.what2eat.feature.foodpool
 
+import com.what2eat.core.designsystem.animation.bounceClickable
+import com.what2eat.core.designsystem.animation.bouncyPress
+import com.what2eat.core.designsystem.animation.entranceBounce
+import com.what2eat.core.designsystem.animation.gentleBob
 import com.what2eat.core.designsystem.icon.What2EatIcons
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,6 +38,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,12 +66,28 @@ fun FoodPoolScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+    // v0.9.2：标签管理面板
+    var showTagManage by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.food_pool_title)) })
+            TopAppBar(
+                title = { Text(stringResource(R.string.food_pool_title)) },
+                actions = {
+                    IconButton(onClick = { showTagManage = true }) {
+                        Icon(What2EatIcons.Tag, contentDescription = "标签管理")
+                    }
+                }
+            )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onAddClick) {
+            // v0.9.4：FAB 按压弹性回缩
+            val fabInteraction = remember { MutableInteractionSource() }
+            FloatingActionButton(
+                onClick = onAddClick,
+                interactionSource = fabInteraction,
+                modifier = Modifier.bouncyPress(fabInteraction)
+            ) {
                 Icon(What2EatIcons.Add, contentDescription = "添加")
             }
         }
@@ -148,21 +173,40 @@ fun FoodPoolScreen(
                         ),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(uiState.items, key = { it.id }) { option ->
-                            OptionCard(option = option, onClick = { onOptionClick(option) })
+                        // v0.9.4：交错入场（首屏最多 8 项参与 stagger，长列表不拖沓）
+                        itemsIndexed(uiState.items, key = { _, option -> option.id }) { index, option ->
+                            OptionCard(
+                                option = option,
+                                onClick = { onOptionClick(option) },
+                                entranceDelayMillis = index.coerceAtMost(8) * 45
+                            )
                         }
                     }
                 }
             }
         }
     }
+
+    // v0.9.2：标签管理面板（重命名/合并/删除）
+    if (showTagManage) {
+        TagManageSheet(onDismiss = { showTagManage = false })
+    }
 }
 
+/**
+ * v0.9.4：卡片入场弹跳（交错延迟）+ 按压缩放回弹。
+ */
 @Composable
-private fun OptionCard(option: SavedOption, onClick: () -> Unit) {
+private fun OptionCard(
+    option: SavedOption,
+    onClick: () -> Unit,
+    entranceDelayMillis: Int = 0
+) {
     Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .entranceBounce(key = option.id, delayMillis = entranceDelayMillis)
+            .bounceClickable(onClick),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
@@ -222,7 +266,9 @@ private fun EmptyState(tab: PoolTab, isSearching: Boolean) {
         Icon(
             imageVector = What2EatIcons.RestaurantMenu,
             contentDescription = null,
-            modifier = Modifier.size(64.dp),
+            modifier = Modifier
+                .size(64.dp)
+                .gentleBob(),
             tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
         )
         Spacer(modifier = Modifier.height(16.dp))

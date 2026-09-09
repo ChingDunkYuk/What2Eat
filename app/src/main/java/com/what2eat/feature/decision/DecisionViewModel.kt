@@ -66,7 +66,6 @@ class DecisionViewModel @Inject constructor(
         private const val TAG = "DecisionViewModel"
         private const val PRIMARY_ID = "person_primary"
         private const val DAY_MS = 86_400_000L
-        private const val RANDOM_SEED = 20260807L
     }
 
     /** 是否从首页"先决定吃什么"进入（true）——用于决定是否提示覆盖活动会话 */
@@ -719,10 +718,11 @@ class DecisionViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(isComputingRecommendation = true)
                 val result = runEngine(sessionId, emptySet())
                 applyRecommendationResult(result, sessionId, emptySet(), 0)
+                // 注意：recommendationExhausted 以 applyRecommendationResult 写入的真实结果为准，
+                // 不在此强制置 false（否则条件性耗尽时状态与 UI 不一致）
                 _uiState.value = _uiState.value.copy(
                     isComputingRecommendation = false,
                     rerollCount = 0,
-                    recommendationExhausted = false,
                     step = DecisionStep.RECOMMENDATION
                 )
             } catch (e: Exception) {
@@ -778,7 +778,9 @@ class DecisionViewModel @Inject constructor(
         val context = DecisionContext(
             mealModes = st.mealModes,
             moodTags = st.moodTags,
-            budgetLevel = st.budgetLevel
+            budgetLevel = st.budgetLevel,
+            // v0.9.0：距离条件接入引擎（此前收集后未消费，选了等于没选）
+            distanceLevel = st.distanceLevel
         )
 
         // 历史防重复（最近一次完成时间）

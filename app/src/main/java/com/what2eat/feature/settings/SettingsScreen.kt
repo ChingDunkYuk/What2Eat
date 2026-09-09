@@ -1,7 +1,10 @@
-﻿package com.what2eat.feature.settings
+package com.what2eat.feature.settings
 
+import com.what2eat.BuildConfig
 import com.what2eat.core.designsystem.icon.What2EatIcons
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -30,12 +34,15 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -43,10 +50,13 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.what2eat.R
 import com.what2eat.domain.model.AppUsageMode
 import com.what2eat.domain.model.PersonProfile
+import kotlinx.coroutines.delay
 
 /**
  * 设置页面。
@@ -61,9 +71,38 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val backupState by viewModel.backupState.collectAsStateWithLifecycle()
+    val meituanLoggedIn by viewModel.meituanLoggedIn.collectAsStateWithLifecycle()
+
+    // v1.1.0：从美团登录页返回时刷新登录态显示
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshMeituanLogin()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     // 编辑对话框状态
     var editingPerson by remember { mutableStateOf<PersonProfile?>(null) }
+
+    // ── v0.9.3：备份/恢复 SAF 文件选择器 ──
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri -> uri?.let(viewModel::exportTo) }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let(viewModel::importFrom) }
+
+    // 操作提示短暂显示后自动消失
+    LaunchedEffect(backupState.message) {
+        if (backupState.message != null) {
+            delay(3200L)
+            viewModel.consumeBackupMessage()
+        }
+    }
 
     when {
         // ── 加载中 ──
@@ -116,6 +155,17 @@ fun SettingsScreen(
             onNavigateToPreference = onNavigateToPreference,
             onEditName = { editingPerson = it },
             onRepairPrimary = viewModel::repairPrimary,
+            backupState = backupState,
+            onExportClick = { exportLauncher.launch(viewModel.defaultBackupFileName()) },
+            onImportClick = {
+                // mime 放宽：部分文件管理器对 .json 报 octet-stream/text/plain
+                importLauncher.launch(
+                    arrayOf("application/json", "application/octet-stream", "text/plain")
+                )
+            },
+            meituanLoggedIn = meituanLoggedIn,
+            onMeituanLoginClick = viewModel::openMeituanLogin,
+            onMeituanLogoutClick = viewModel::logoutMeituan,
             viewModel = viewModel
         )
     }
@@ -132,6 +182,37 @@ fun SettingsScreen(
             }
         )
     }
+
+    // ── v0.9.3：导入确认对话框（覆盖警告）──
+    backupState.pendingImport?.let { pending ->
+        val s = pending.summary
+        AlertDialog(
+            onDismissRequest = { if (!backupState.isWorking) viewModel.dismissImportPreview() },
+            icon = { Icon(What2EatIcons.WarningAmber, contentDescription = null) },
+            title = { Text("恢复这份备份？") },
+            text = {
+                Text(
+                    "备份内容：${s.profileCount} 位人物、${s.optionCount} 家店、" +
+                        "${s.tagCount} 个标签、${s.sessionCount} 条决定历史。\n\n" +
+                        "导入将覆盖当前全部数据，且无法撤销。"
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = viewModel::confirmImport,
+                    enabled = !backupState.isWorking
+                ) {
+                    Text("覆盖恢复", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = viewModel::dismissImportPreview,
+                    enabled = !backupState.isWorking
+                ) { Text("取消") }
+            }
+        )
+    }
 }
 
 /**
@@ -143,6 +224,12 @@ private fun SettingsContent(
     onNavigateToPreference: (String) -> Unit,
     onEditName: (PersonProfile) -> Unit,
     onRepairPrimary: (String) -> Unit,
+    backupState: BackupUiState,
+    onExportClick: () -> Unit,
+    onImportClick: () -> Unit,
+    meituanLoggedIn: Boolean,
+    onMeituanLoginClick: () -> Unit,
+    onMeituanLogoutClick: () -> Unit,
     viewModel: SettingsViewModel
 ) {
     Column(
@@ -213,6 +300,24 @@ private fun SettingsContent(
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // ── v1.1.0：美团登录（可选，提升店名识别）──
+        MeituanLoginSection(
+            loggedIn = meituanLoggedIn,
+            onLoginClick = onMeituanLoginClick,
+            onLogoutClick = onMeituanLogoutClick
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // ── 备份与恢复（v0.9.3） ──
+        BackupSection(
+            backupState = backupState,
+            onExportClick = onExportClick,
+            onImportClick = onImportClick
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
         // ── 关于 ──
         Text(
             text = stringResource(R.string.settings_about),
@@ -225,7 +330,9 @@ private fun SettingsContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
-            text = stringResource(R.string.settings_version, "0.8.7"),
+            // v0.9.0：从 BuildConfig 读取（此前双处硬编码，v0.8.9~v0.8.17 九个版本
+            // 忘记同步设置页，一直显示 0.8.8）
+            text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -253,6 +360,104 @@ private fun SettingsContent(
             confirmButton = {},
             dismissButton = {}
         )
+    }
+}
+
+/**
+ * v1.1.0：美团登录区块（可选，实验性）。
+ *
+ * v1.2.5 自查：登录会话只落 passport 域、H5 子域会话需独立 SSO（实测子域
+ * 接口仍「用户未登陆」），且 yoda 风控墙/H5guard 签名与登录态无关——
+ * 对店名识别帮助有限；滑块验证人工通过才是主通道。文案不夸大。
+ */
+@Composable
+private fun MeituanLoginSection(
+    loggedIn: Boolean,
+    onLoginClick: () -> Unit,
+    onLogoutClick: () -> Unit
+) {
+    Text(
+        text = "美团登录",
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Text(
+        text = if (loggedIn) {
+            "已登录美团通行证 · 注意：子域会话不共享，对店名识别帮助有限"
+        } else {
+            "实验性：美团 H5 各子域登录会话不互通，登录对店名识别帮助有限；识别以滑块验证为主，失败可手动输入"
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    if (loggedIn) {
+        OutlinedButton(onClick = onLogoutClick, modifier = Modifier.fillMaxWidth()) {
+            Text("退出美团登录")
+        }
+    } else {
+        OutlinedButton(onClick = onLoginClick, modifier = Modifier.fillMaxWidth()) {
+            Text("登录美团（实验性）")
+        }
+    }
+}
+
+/**
+ * 备份与恢复区块（v0.9.3）。
+ *
+ * 导出：全量数据 → SAF JSON 文件；导入：SAF 选文件 → 预览确认 → 全量替换。
+ */
+@Composable
+private fun BackupSection(
+    backupState: BackupUiState,
+    onExportClick: () -> Unit,
+    onImportClick: () -> Unit
+) {
+    Text(
+        text = "备份与恢复",
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Text(
+        text = "导出全部数据（吃饭池、历史、偏好、人物）为 JSON 文件；换机或重装后可从备份恢复。",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    backupState.message?.let { msg ->
+        Text(
+            text = msg,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = if (backupState.isError) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.primary
+            }
+        )
+    }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(
+            onClick = onExportClick,
+            enabled = !backupState.isWorking,
+            modifier = Modifier.weight(1f)
+        ) {
+            if (backupState.isWorking) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Text("导出备份")
+        }
+        OutlinedButton(
+            onClick = onImportClick,
+            enabled = !backupState.isWorking,
+            modifier = Modifier.weight(1f)
+        ) {
+            Text("导入备份")
+        }
     }
 }
 

@@ -38,7 +38,9 @@ data class ShareImportFormState(
     val saved: Boolean = false,
     val unsupported: Boolean = false,
     /** 后台正在抓取链接标题补店名 */
-    val isResolvingName: Boolean = false
+    val isResolvingName: Boolean = false,
+    /** v1.2.0：撞 yoda 验证墙后待人工通过的验证页 URL（非 null 时弹验证弹窗） */
+    val verifyUrl: String? = null
 ) {
     /** 收件箱模式：解析出草稿即可保存，名称/类型允许留空（自动兜底） */
     val canSave: Boolean get() = draft != null
@@ -46,6 +48,7 @@ data class ShareImportFormState(
 
 @HiltViewModel
 class ShareImportViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
     private val repository: SavedOptionRepository,
     private val linkTitleFetcher: LinkTitleFetcher
 ) : ViewModel() {
@@ -80,21 +83,81 @@ class ShareImportViewModel @Inject constructor(
             notes = draft.detectedNotes.orEmpty()
             // 收件箱模式：名称解析不出也不阻塞，保存时用兜底名称占位
         )
-        // 名称解析不出且有链接 → 后台抓网页 <title> 自动补店名（失败静默回退手动填写）
-        if (draft.detectedName == null && draft.detectedUrl != null) {
+        // v1.1.0：初始化诊断日志文件（进程安全落盘）
+        com.what2eat.data.share.FetchDebugLog.init(appContext)
+        com.what2eat.data.share.FetchDebugLog.reset()
+        // v1.2.0：清掉上一次分享的验证墙残留信号
+        com.what2eat.data.share.VerifyWallSignal.clear()
+        com.what2eat.data.share.FetchDebugLog.add(
+            "解析: name=${draft.detectedName ?: "null"} url=${draft.detectedUrl ?: "null"}"
+        )
+
+        // v1.1.0：有链接就抓（占位名「待确认店铺」也尝试换真名——此前仅 detectedName==null
+        // 才触发，美团分享常解析出占位名导致抓取链根本不启动、诊断无日志）。
+        // 抓不到静默回退；抓到了且名称是占位名/空白才覆盖（不覆盖用户手动输入）。
+        if (draft.detectedUrl != null) {
             val url = draft.detectedUrl
-            _uiState.value = _uiState.value.copy(isResolvingName = true)
-            viewModelScope.launch {
-                val title = linkTitleFetcher.fetchTitle(url)
-                val s = _uiState.value
-                // 用户已手动输入/已保存 → 不覆盖
-                if (!title.isNullOrBlank() && !s.saved && s.name.isBlank() && !nameTouchedByUser) {
-                    _uiState.value = s.copy(name = title, isResolvingName = false)
-                } else {
-                    _uiState.value = s.copy(isResolvingName = false)
-                }
-            }
+            val initialNameIsPlaceholder = draft.detectedName == null ||
+                draft.detectedName.startsWith("待确认店铺")
+            resolveName(url, initialNameIsPlaceholder)
         }
+    }
+
+    /**
+     * 后台抓链接标题补店名。抓不到且撞过 yoda 验证墙 → 置 verifyUrl 触发人工验证弹窗。
+     * v0.8.11 防御：抓取链路任何异常（网络/解析/WebView）都不得冒泡成未捕获协程
+     * 异常——否则分享确认页进程被杀，用户表现为「确认页闪现后瞬间跳回美团」。
+     */
+    private fun resolveName(url: String, initialNameIsPlaceholder: Boolean) {
+        _uiState.value = _uiState.value.copy(isResolvingName = true)
+        viewModelScope.launch {
+            val title = runCatching { linkTitleFetcher.fetchTitle(url) }.getOrNull()
+            val s = _uiState.value
+            // 覆盖条件：抓到真名 且（名称空白或仍是占位名）且用户未手动改过且未保存
+            val currentIsPlaceholder = s.name.isBlank() || s.name.startsWith("待确认店铺")
+            if (!title.isNullOrBlank() && !s.saved && currentIsPlaceholder &&
+                initialNameIsPlaceholder && !nameTouchedByUser) {
+                _uiState.value = s.copy(name = title, isResolvingName = false, verifyUrl = null)
+                return@launch
+            }
+            // v1.2.0：失败且撞过验证墙 → 弹人工验证（用户仍可能改名称时才有意义）
+            val wall = if (!s.saved && currentIsPlaceholder && !nameTouchedByUser) {
+                com.what2eat.data.share.VerifyWallSignal.consume()
+            } else {
+                com.what2eat.data.share.VerifyWallSignal.clear()
+                null
+            }
+            if (wall != null) {
+                com.what2eat.data.share.FetchDebugLog.add("撞验证墙,弹人工验证")
+            }
+            _uiState.value = s.copy(isResolvingName = false, verifyUrl = wall)
+        }
+    }
+
+    /**
+     * v1.2.0：用户在验证页滑过 yoda → 关页重试（通过态 cookie 已种下）。
+     * v1.2.4：验证页通过后落地店铺页可直接带回店名（shopName 非空）——免重试。
+     */
+    fun onVerifyPassed(shopName: String?) {
+        com.what2eat.data.share.FetchDebugLog.add(
+            "验证已通过${if (!shopName.isNullOrBlank()) ",店名:$shopName" else ",重试抓取"}"
+        )
+        val s = _uiState.value
+        if (!shopName.isNullOrBlank() && !s.saved && !nameTouchedByUser &&
+            (s.name.isBlank() || s.name.startsWith("待确认店铺"))
+        ) {
+            _uiState.value = s.copy(name = shopName, verifyUrl = null, isResolvingName = false)
+            return
+        }
+        val url = s.draft?.detectedUrl ?: return
+        _uiState.value = s.copy(verifyUrl = null)
+        resolveName(url, initialNameIsPlaceholder = true)
+    }
+
+    /** v1.2.0：用户取消验证弹窗 → 清信号，保持手动填写 */
+    fun onVerifyDismissed() {
+        com.what2eat.data.share.VerifyWallSignal.clear()
+        _uiState.value = _uiState.value.copy(verifyUrl = null)
     }
 
     fun onNameChange(v: String) {

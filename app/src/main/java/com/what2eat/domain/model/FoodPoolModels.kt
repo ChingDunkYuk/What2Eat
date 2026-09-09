@@ -45,6 +45,15 @@ data class SavedOptionTag(
 )
 
 /**
+ * 标签使用统计（v0.9.2 标签管理）。
+ * name 即标签字符串本体；usageCount 为挂载该标签的选项数。
+ */
+data class TagUsage(
+    val name: String,
+    val usageCount: Int
+)
+
+/**
  * 人物对具体吃饭选项的长期偏好。
  * 与 PersonCategoryPreference（对分类的偏好）是两套不同数据。
  */

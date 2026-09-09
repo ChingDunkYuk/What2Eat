@@ -101,8 +101,8 @@ class DefaultDecisionEngine : DecisionEngine {
             if (sel != SelectionType.WANT && sel != SelectionType.ACCEPT) return null
         }
 
-        // 6. 与当前用餐方式冲突
-        if (context.mealModes.isNotEmpty()) {
+        // 6. 与当前用餐方式冲突（ANY=「都可以」不构成约束：选它时不过滤任何用餐方式）
+        if (context.mealModes.isNotEmpty() && MealMode.ANY !in context.mealModes) {
             val intersects = c.supportedMealModes.any { it in context.mealModes }
             if (!intersects) return null
         }
@@ -147,6 +147,9 @@ class DefaultDecisionEngine : DecisionEngine {
             reasons.add(RecommendationReason(ReasonType.NOT_EATEN_RECENTLY, "not_eaten_recently"))
         }
 
+        // 距离偏好（v0.9.0：软评分静默生效，不加推荐原因——与预算/状态同量级）
+        val distanceScore = CategoryRules.distanceScore(c.attributes, context.distanceLevel)
+
         // 长期偏好
         val anyLiked = participants.any { p ->
             (p.longTermLevelByCategory[c.categoryId] ?: 0) >= 1
@@ -183,12 +186,12 @@ class DefaultDecisionEngine : DecisionEngine {
             val average = scores.average()
             val minScore = scores.min()
             val fairScore = minScore * 0.7 + average * 0.3
-            fairScore + conditionScore + mealScore + budgetScore + historyScore
+            fairScore + conditionScore + mealScore + budgetScore + historyScore + distanceScore
         } else {
             val p = participants.firstOrNull()
             val selection = selectionBonus[p?.personId] ?: 0
             val longTerm = longTermBonus(p?.longTermLevelByCategory?.get(c.categoryId) ?: 0)
-            BASE_SCORE + selection + longTerm + conditionScore + mealScore + budgetScore + historyScore
+            BASE_SCORE + selection + longTerm + conditionScore + mealScore + budgetScore + historyScore + distanceScore
         }
 
         return RecommendationItem(

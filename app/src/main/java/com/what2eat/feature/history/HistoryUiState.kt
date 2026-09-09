@@ -32,6 +32,8 @@ data class HistoryGroupView(
 /**
  * 单条历史记录。
  * v0.8.1：新增 completedAt/rerollCount（统计与按日分组所需）；sessionId 仅作列表 key，不再展示。
+ * v0.9.0：新增 areaText——池决策记录携带店铺区域，「再次搜索」拼进关键词
+ * （「区域 店名」提升找店命中率；分类决策无区域概念，为 null）。
  */
 data class HistoryItem(
     val sessionId: String,
@@ -40,5 +42,6 @@ data class HistoryItem(
     val completedAtText: String,
     val decisionModeText: String,
     val rerollCount: Int,
-    val participants: List<String>
+    val participants: List<String>,
+    val areaText: String? = null
 )

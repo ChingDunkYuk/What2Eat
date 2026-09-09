@@ -85,6 +85,34 @@ class ShareImportHardeningTest {
         assertEquals("台屿·台湾食堂", draft.detectedName)
     }
 
+    // ── v0.8.13：平台模板文案护栏（真实回归：名称栏被填「来自美团的分享」）──
+
+    @Test
+    fun `platform template subject is rejected and triggers link fetch path`() {
+        // 用户真实案例：美团分享的 EXTRA_SUBJECT = "来自美团的分享"，
+        // 正文无店名只有短链——模板文案绝不能当店名，detectedName 必须为 null
+        // （null 才会触发链接标题抓取去拿真名）
+        val draft = ShareTextParser.createDraft(
+            rawText = "来自美团的分享\nhttps://tb.htuiot.com/Qr4WxPm",
+            subject = "来自美团的分享",
+            sourcePackage = "com.sankuai.meituan"
+        )
+        assertNull(draft.detectedName)
+        assertNotNull(draft.detectedUrl)
+    }
+
+    @Test
+    fun `platform template phrases rejected across guards`() {
+        assertTrue(ShareTextParser.isPlatformTemplate("来自美团的分享"))
+        assertTrue(ShareTextParser.isPlatformTemplate("来自大众点评的分享"))
+        assertTrue(ShareTextParser.isPlatformTemplate("大众点评分享了这家店"))
+        // 网页标题护栏同样拒绝
+        assertNull(ShareTextParser.cleanWebTitle("来自美团的分享"))
+        // 正常店名不受影响（含「来自」但非模板）
+        assertFalse(ShareTextParser.isPlatformTemplate("来自大自然的馈赠"))
+        assertFalse(ShareTextParser.isPlatformTemplate("台屿·台湾食堂"))
+    }
+
     // ── extractInfoNotes：地址/电话/营业时间进备注 ──
 
     @Test
@@ -150,6 +178,36 @@ class ShareImportHardeningTest {
         assertNull(ShareTextParser.cleanWebTitle("安全验证"))
         assertNull(ShareTextParser.cleanWebTitle("人机验证 - 请完成验证后继续访问"))
         assertNull(ShareTextParser.cleanWebTitle("滑动验证"))
+    }
+
+    // ── v0.8.8：通用落地页/营销页标题护栏 ──
+
+    @Test
+    fun `web title rejects generic landing page titles`() {
+        // 实测美团唤起页/营销页标题（2026-09）：均非店名
+        assertNull(ShareTextParser.cleanWebTitle("问美团，都安排"))
+        assertNull(ShareTextParser.cleanWebTitle("和美团合作"))
+        assertNull(ShareTextParser.cleanWebTitle("活动已结束"))
+        assertNull(ShareTextParser.cleanWebTitle("打开App"))
+        assertNull(ShareTextParser.cleanWebTitle("下载大众点评App"))
+    }
+
+    // ── v0.8.9：登录页/SPA 壳页标题护栏（v0.8.8 真实回归：名称栏被填「大众点评网」）──
+
+    @Test
+    fun `web title rejects login page and spa shell titles`() {
+        // 实测（2026-09-03）：
+        // - www.dianping.com/shop/{id} 301 → account.dianping.com 登录页，title="大众点评网"
+        // - meishi.meituan.com POI H5 SPA 壳 title="商家详情"（店名只在 DOM 里）
+        // - 美团 H5 账号安全检查页（无登录态时 POI 页渲染成该页）
+        assertNull(ShareTextParser.cleanWebTitle("大众点评网"))
+        assertNull(ShareTextParser.cleanWebTitle("美团网"))
+        assertNull(ShareTextParser.cleanWebTitle("商家详情"))
+        assertNull(ShareTextParser.cleanWebTitle("店铺详情"))
+        assertNull(ShareTextParser.cleanWebTitle("页面不存在"))
+        assertNull(ShareTextParser.cleanWebTitle("检测到当前登录环境异常，为保障账号安全，请确认这是不是您本人的账号"))
+        // 站点名做整串精确匹配：真实标题「店名_大众点评」的后缀剥离不受影响
+        assertEquals("台屿·台湾食堂", ShareTextParser.cleanWebTitle("台屿·台湾食堂_大众点评"))
     }
 
     // ── HtmlTitleExtractor：HTML 标题提取 ──
@@ -359,11 +417,14 @@ class ShareImportHardeningTest {
         // 2026-09 实测 dpurl.cn/cgDhxzyz 的真实跳转链：
         // 302 → https://w.dianping.com/cube/evoke/meituan.html?url=imeituan%3A%2F%2F...poiId%3D1475979044...
         val evokeUrl = "https://w.dianping.com/cube/evoke/meituan.html?url=imeituan%3A%2F%2Fwww.meituan.com%2Fmrn%3Fmrn_biz%3Dmeishi%26mrn_entry%3Dfood-poi%26mrn_component%3Dfood-poi%26poiId%3D1475979044%26poiIdEncrypt%3DqB4r177c7fa207bf95e364a737925473600ee8e63d7684a26106e19f7129f9272bd6cd6c1ba1daedb6bc7d73647c5ff6vxu5&utm_source=appshare&utm_fromapp=more"
-        // v0.8.5：候选页列表，点评 H5 店铺页优先（美团/点评 POI 互通）
+        // v0.8.15：恢复三候选。v0.8.10 删点评候选是因为 302→scheme 唤起绕过
+        // 导航拦截；v0.8.11 主文档代理根除该盲区后，多点探测是安全的——
+        // 任何候选失败都只是「店名解析不出」，不会再把用户拽去美团 App。
         assertEquals(
             listOf(
-                "https://m.dianping.com/shop/1475979044",
-                "https://www.meituan.com/meishi/1475979044/"
+                "https://i.meituan.com/poi/1475979044",
+                "https://meishi.meituan.com/meishi/poi/index.html?isItoH5=true&poiId=1475979044",
+                "https://m.dianping.com/shop/1475979044"
             ),
             MeituanEvokeResolver.extractPoiH5Urls(evokeUrl)
         )

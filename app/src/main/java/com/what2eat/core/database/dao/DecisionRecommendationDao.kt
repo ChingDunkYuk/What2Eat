@@ -2,6 +2,7 @@ package com.what2eat.core.database.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.what2eat.core.database.entity.DecisionRecommendationEntity
 import kotlinx.coroutines.flow.Flow
@@ -26,4 +27,16 @@ interface DecisionRecommendationDao {
 
     @Query("UPDATE decision_recommendation SET rejected = 1 WHERE sessionId = :sessionId AND categoryId = :categoryId")
     suspend fun markRejected(sessionId: String, categoryId: String)
+
+    // ── 备份/恢复（v0.9.3） ──
+
+    @Query("SELECT * FROM decision_recommendation")
+    suspend fun getAll(): List<DecisionRecommendationEntity>
+
+    /** 备份恢复：显式保留原 id（autoGenerate 字段传非 0 值时 Room 采用显式值） */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(entities: List<DecisionRecommendationEntity>)
+
+    @Query("DELETE FROM decision_recommendation")
+    suspend fun deleteAll()
 }

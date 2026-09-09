@@ -112,6 +112,10 @@ fun What2EatNavHost(initialOptionId: String? = null) {
                     },
                     onContinueSessionClick = {
                         navController.navigate(What2EatRoutes.decisionFlowRoute(startNew = false))
+                    },
+                    onReviewClick = {
+                        // v0.9.0：首页待整理提醒 → 直达吃饭池
+                        navController.navigate(BottomNavDestination.FoodPool.route)
                     }
                 )
             }

@@ -15,12 +15,14 @@ import com.what2eat.domain.repository.SavedOptionRepository
 import com.what2eat.domain.search.PlatformSearchLauncher
 import com.what2eat.domain.search.SearchLauncher
 import com.what2eat.domain.search.SearchPlatform
+import com.what2eat.domain.search.SearchQueryBuilder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.time.LocalDate
@@ -62,11 +64,12 @@ class HistoryViewModel @Inject constructor(
 
     // ── Stage 3.2：再次搜索 ──
 
-    /** 打开平台承接面板，供"再次搜索"复用 */
-    fun showSearchPanel(categoryName: String) {
+    /** 打开平台承接面板，供"再次搜索"复用（v0.9.0：区域拼进搜索词） */
+    fun showSearchPanel(categoryName: String, areaText: String? = null) {
+        val query = SearchQueryBuilder.build(categoryName, areaText).query
         _uiState.value = _uiState.value.copy(
             showSearchPanel = true,
-            searchQuery = categoryName.trim()
+            searchQuery = query
         )
     }
 
@@ -111,21 +114,25 @@ class HistoryViewModel @Inject constructor(
 
                 if (completed.isEmpty()) return@combine HistoryUiState(isLoading = false, isEmpty = true)
 
+                // v0.9.1：批量化取数——三张查找表一次取齐，
+                // 替代循环内逐条查询（2N+1 次 → 3 次固定查询）
+                val participantsBySession = sessionRepository.getAllParticipants()
+                    .groupBy { it.sessionId }
+                val optionById = savedOptionRepository.observeAll().first()
+                    .associateBy { it.id }
+                val categoryById = foodCategoryRepository.observeAll().first()
+                    .associateBy { it.id }
+
                 val items = completed.map { session ->
-                    val participants = sessionRepository.getParticipants(session.id)
+                    val participants = participantsBySession[session.id].orEmpty()
                         .sortedBy { it.selectionOrder }
                         .map { profileByName[it.personId]?.name ?: it.personId }
                     // 池决策显示店名；分类决策显示分类名
-                    val resultName = if (session.selectedOptionId != null) {
-                        val option = runCatching {
-                            savedOptionRepository.getById(session.selectedOptionId)
-                        }.getOrNull()
-                        option?.name ?: "已删除的选项"
-                    } else {
-                        val category = session.selectedCategoryId
-                            ?.let { runCatching { foodCategoryRepository.getById(it) }.getOrNull() }
-                        category?.name ?: session.selectedCategoryId ?: "未知分类"
-                    }
+                    val option = session.selectedOptionId?.let { optionById[it] }
+                    val resultName = option?.name
+                        ?: session.selectedCategoryId?.let { categoryById[it] }?.name
+                        ?: session.selectedCategoryId
+                        ?: if (session.selectedOptionId != null) "已删除的选项" else "未知分类"
                     HistoryItem(
                         sessionId = session.id,
                         categoryName = resultName,
@@ -133,7 +140,9 @@ class HistoryViewModel @Inject constructor(
                         completedAtText = formatTime(session.completedAt ?: session.createdAt),
                         decisionModeText = modeText(session.decisionMode),
                         rerollCount = session.rerollCount,
-                        participants = participants
+                        participants = participants,
+                        // v0.9.0：池决策记录携带区域（「再次搜索」用）
+                        areaText = option?.areaText
                     )
                 }
 

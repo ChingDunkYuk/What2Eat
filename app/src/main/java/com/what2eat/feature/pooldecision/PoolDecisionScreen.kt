@@ -1,8 +1,12 @@
 package com.what2eat.feature.pooldecision
 
+import com.what2eat.core.designsystem.animation.bouncyPress
+import com.what2eat.core.designsystem.animation.entranceBounce
+import com.what2eat.core.designsystem.animation.gentleBob
 import com.what2eat.core.designsystem.icon.What2EatBackIcon
 import com.what2eat.core.designsystem.icon.What2EatIcons
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -205,9 +209,11 @@ private fun RecommendationContent(
     val recommendation = uiState.recommendation ?: return
     val option = uiState.currentOption ?: return
 
-    // 结果卡
+    // 结果卡（v0.9.4：换一个后随 option.id 变化重新弹跳出场）
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .entranceBounce(key = option.id),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -305,15 +311,20 @@ private fun RecommendationContent(
         }
     }
 
-    // 底部操作
+    // 底部操作（v0.9.4：按钮按压弹性）
     if (!uiState.isConfirmed) {
+        val rerollInteraction = remember { MutableInteractionSource() }
+        val confirmInteraction = remember { MutableInteractionSource() }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             OutlinedButton(
                 onClick = viewModel::reroll,
-                modifier = Modifier.weight(1f)
+                interactionSource = rerollInteraction,
+                modifier = Modifier
+                    .weight(1f)
+                    .bouncyPress(rerollInteraction)
             ) {
                 Icon(
                     imageVector = What2EatIcons.Refresh,
@@ -324,7 +335,10 @@ private fun RecommendationContent(
             }
             Button(
                 onClick = viewModel::confirmPick,
-                modifier = Modifier.weight(1f)
+                interactionSource = confirmInteraction,
+                modifier = Modifier
+                    .weight(1f)
+                    .bouncyPress(confirmInteraction)
             ) {
                 Icon(
                     imageVector = What2EatIcons.Check,
@@ -389,7 +403,9 @@ private fun EmptyPoolContent(onGoToPool: () -> Unit) {
             imageVector = What2EatIcons.Mascot,
             contentDescription = null,
             tint = Color.Unspecified,
-            modifier = Modifier.size(72.dp)
+            modifier = Modifier
+                .size(72.dp)
+                .gentleBob()
         )
         Text(
             text = "吃饭池还是空的",
@@ -403,7 +419,12 @@ private fun EmptyPoolContent(onGoToPool: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
-        Button(onClick = onGoToPool) {
+        val goPoolInteraction = remember { MutableInteractionSource() }
+        Button(
+            onClick = onGoToPool,
+            interactionSource = goPoolInteraction,
+            modifier = Modifier.bouncyPress(goPoolInteraction)
+        ) {
             Text("去吃饭池看看")
         }
     }
@@ -422,7 +443,9 @@ private fun ExhaustedContent(onReset: () -> Unit) {
             imageVector = What2EatIcons.WarningAmber,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
-            modifier = Modifier.size(64.dp)
+            modifier = Modifier
+                .size(64.dp)
+                .gentleBob()
         )
         Text(
             text = "全部换过一遍了",
@@ -458,7 +481,9 @@ private fun NoMatchContent(onAdjust: () -> Unit) {
             imageVector = What2EatIcons.Search,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
-            modifier = Modifier.size(64.dp)
+            modifier = Modifier
+                .size(64.dp)
+                .gentleBob()
         )
         Text(
             text = "当前筛选没有合适的选项",

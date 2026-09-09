@@ -97,7 +97,20 @@ class DecisionHistoryTest {
         override suspend fun getCompletedWithSelection(): List<DecisionSessionEntity> =
             current()
                 .filter { it.status == 3 && it.selectedCategoryId != null }
-                .sortedBy { it.completedAt ?: 0 }
+                .sortedBy { it.completedAt }
+
+        // ── 备份/恢复（v0.9.3）──
+
+        override suspend fun getAll(): List<DecisionSessionEntity> = current()
+
+        override suspend fun insertAll(entities: List<DecisionSessionEntity>) {
+            val without = current().filterNot { e -> entities.any { it.id == e.id } }
+            state.value = without + entities
+        }
+
+        override suspend fun deleteAll() {
+            state.value = emptyList()
+        }
 
         override suspend fun updateConditions(
             id: String, mealModes: String, moodTags: String,
@@ -146,6 +159,19 @@ class DecisionHistoryTest {
                 if (it.sessionId == sessionId && it.categoryId == categoryId) it.copy(rejected = true) else it
             }
         }
+
+        // ── 备份/恢复（v0.9.3）──
+
+        override suspend fun getAll(): List<DecisionRecommendationEntity> = current()
+
+        override suspend fun insertAll(entities: List<DecisionRecommendationEntity>) {
+            val without = current().filterNot { e -> entities.any { it.id == e.id } }
+            state.value = without + entities
+        }
+
+        override suspend fun deleteAll() {
+            state.value = emptyList()
+        }
     }
 
     private class FakeSessionParticipantDao(
@@ -162,6 +188,8 @@ class DecisionHistoryTest {
         override suspend fun getBySession(sessionId: String): List<SessionParticipantEntity> =
             current().filter { it.sessionId == sessionId }.sortedBy { it.selectionOrder }
 
+        override suspend fun getAll(): List<SessionParticipantEntity> = current()
+
         override suspend fun upsertAll(entities: List<SessionParticipantEntity>) {
             val without = current().filterNot { e -> entities.any { it.sessionId == e.sessionId && it.personId == e.personId } }
             state.value = without + entities
@@ -175,6 +203,12 @@ class DecisionHistoryTest {
 
         override suspend fun deleteBySession(sessionId: String) {
             state.value = current().filterNot { it.sessionId == sessionId }
+        }
+
+        // ── 备份/恢复（v0.9.3）──
+
+        override suspend fun deleteAll() {
+            state.value = emptyList()
         }
     }
 

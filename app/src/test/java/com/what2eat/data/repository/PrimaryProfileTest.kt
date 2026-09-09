@@ -98,6 +98,17 @@ class PrimaryProfileTest {
         override suspend fun migrateParticipantPersonId(oldId: String, newId: String) {
             // 不需要断言参与表，测试中无引用数据
         }
+
+        // ── 备份/恢复（v0.9.3）──
+
+        override suspend fun insertAll(entities: List<PersonProfileEntity>) {
+            val without = current().filterNot { e -> entities.any { it.id == e.id } }
+            state.value = without + entities
+        }
+
+        override suspend fun deleteAll() {
+            state.value = emptyList()
+        }
     }
 
     /** 内存使用模式仓库，默认双人 */

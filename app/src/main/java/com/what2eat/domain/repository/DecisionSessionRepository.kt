@@ -43,6 +43,9 @@ interface DecisionSessionRepository {
     /** 获取会话参与者 */
     suspend fun getParticipants(sessionId: String): List<SessionParticipant>
 
+    /** 全量参与者（v0.9.1：历史页 N+1 优化——一次查询内存 groupBy 替代逐会话查询） */
+    suspend fun getAllParticipants(): List<SessionParticipant>
+
     /** 设置会话参与者 */
     suspend fun setParticipants(sessionId: String, participants: List<SessionParticipant>)
 

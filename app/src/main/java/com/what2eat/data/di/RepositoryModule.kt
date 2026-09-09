@@ -9,10 +9,12 @@ import com.what2eat.data.repository.SavedOptionRepositoryImpl
 import com.what2eat.data.search.AndroidPlatformSearchLauncher
 import com.what2eat.data.search.AndroidSearchLauncher
 import com.what2eat.data.share.HttpLinkTitleFetcher
+import com.what2eat.data.repository.BackupManagerImpl
 import com.what2eat.domain.share.LinkTitleFetcher
 import com.what2eat.domain.engine.DecisionEngine
 import com.what2eat.domain.engine.DefaultDecisionEngine
 import com.what2eat.domain.repository.AppUsageModeRepository
+import com.what2eat.domain.repository.BackupManager
 import com.what2eat.domain.repository.DecisionSessionRepository
 import com.what2eat.domain.repository.FoodCategoryRepository
 import com.what2eat.domain.repository.PersonCategoryPreferenceRepository
@@ -87,6 +89,12 @@ abstract class RepositoryModule {
     abstract fun bindLinkTitleFetcher(
         impl: HttpLinkTitleFetcher
     ): LinkTitleFetcher
+
+    @Binds
+    @Singleton
+    abstract fun bindBackupManager(
+        impl: BackupManagerImpl
+    ): BackupManager
 
     companion object {
         @Provides

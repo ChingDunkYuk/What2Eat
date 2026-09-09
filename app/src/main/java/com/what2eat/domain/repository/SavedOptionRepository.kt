@@ -3,6 +3,7 @@ package com.what2eat.domain.repository
 import com.what2eat.domain.model.PersonOptionPreference
 import com.what2eat.domain.model.SavedOption
 import com.what2eat.domain.model.SavedOptionCollection
+import com.what2eat.domain.model.TagUsage
 import com.what2eat.domain.model.CollectionType
 import kotlinx.coroutines.flow.Flow
 
@@ -62,6 +63,20 @@ interface SavedOptionRepository {
     /** 设置选项标签（整组替换） */
     suspend fun setTags(optionId: String, tags: Set<String>)
 
+    // ── 标签管理（v0.9.2） ──
+
+    /** 观察标签使用统计（按使用数降序、名称升序） */
+    fun observeTagUsage(): Flow<List<TagUsage>>
+
+    /**
+     * 重命名标签；目标名已存在时自动合并（同选项重复关联去重）。
+     * to 首尾去空后为空或与原名相同则不做任何事。
+     */
+    suspend fun renameTag(from: String, to: String)
+
+    /** 删除标签（移除其全部关联） */
+    suspend fun deleteTag(tagId: String)
+
     // ── 人物具体偏好 ──
 
     /** 观察选项的被各人物偏好 */
@@ -69,6 +84,9 @@ interface SavedOptionRepository {
 
     /** 获取选项被各人物偏好 */
     suspend fun getPreferences(optionId: String): List<PersonOptionPreference>
+
+    /** 全量选项偏好（v0.9.1：池决策 N+1 优化——一次查询内存 groupBy 替代逐选项查询） */
+    suspend fun getAllPreferences(): List<PersonOptionPreference>
 
     /** 设置某人对某选项的偏好 */
     suspend fun setPreference(preference: PersonOptionPreference)

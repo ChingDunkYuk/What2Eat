@@ -18,6 +18,7 @@ import com.what2eat.domain.model.PersonOptionPreference
 import com.what2eat.domain.model.SavedOption
 import com.what2eat.domain.model.SavedOptionCollection
 import com.what2eat.domain.model.SavedOptionType
+import com.what2eat.domain.model.TagUsage
 import com.what2eat.domain.model.SourcePlatform
 import com.what2eat.domain.repository.SavedOptionRepository
 import kotlinx.coroutines.flow.Flow
@@ -118,11 +119,34 @@ class SavedOptionRepositoryImpl @Inject constructor(
         }
     }
 
+    // ── 标签管理（v0.9.2） ──
+
+    override fun observeTagUsage(): Flow<List<TagUsage>> =
+        tagDao.observeTagUsage().map { list -> list.map { TagUsage(it.tagId, it.usageCount) } }
+
+    override suspend fun renameTag(from: String, to: String) {
+        val target = to.trim()
+        if (target.isEmpty() || target == from) return
+        database.withTransaction {
+            // 先清理同选项「from + to 并存」的冲突行，避免改名撞联合主键；
+            // 目标签已存在时，此步之后 UPDATE 即完成合并（去重）
+            tagDao.deleteMergeConflicts(from, target)
+            tagDao.renameTagRefs(from, target)
+        }
+    }
+
+    override suspend fun deleteTag(tagId: String) {
+        tagDao.deleteByTag(tagId)
+    }
+
     override fun observePreferences(optionId: String): Flow<List<PersonOptionPreference>> =
         preferenceDao.observeByOption(optionId).map { list -> list.map { it.toDomain() } }
 
     override suspend fun getPreferences(optionId: String): List<PersonOptionPreference> =
         preferenceDao.getByOption(optionId).map { it.toDomain() }
+
+    override suspend fun getAllPreferences(): List<PersonOptionPreference> =
+        preferenceDao.getAll().map { it.toDomain() }
 
     override suspend fun setPreference(preference: PersonOptionPreference) {
         preferenceDao.upsert(preference.toEntity())

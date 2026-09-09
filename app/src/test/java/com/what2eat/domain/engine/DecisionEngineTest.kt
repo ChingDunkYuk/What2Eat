@@ -1,6 +1,7 @@
 package com.what2eat.domain.engine
 
 import com.what2eat.domain.model.BudgetLevel
+import com.what2eat.domain.model.DistanceLevel
 import com.what2eat.domain.model.MealMode
 import com.what2eat.domain.model.MoodTag
 import com.what2eat.domain.model.SelectionType
@@ -53,8 +54,9 @@ class DecisionEngineTest {
     private fun context(
         mealModes: Set<MealMode> = emptySet(),
         moodTags: Set<MoodTag> = emptySet(),
-        budget: BudgetLevel = BudgetLevel.UNLIMITED
-    ) = DecisionContext(mealModes, moodTags, budget)
+        budget: BudgetLevel = BudgetLevel.UNLIMITED,
+        distance: DistanceLevel = DistanceLevel.UNLIMITED
+    ) = DecisionContext(mealModes, moodTags, budget, distance)
 
     private fun klausWith(longTerm: Map<String, Int> = emptyMap(), hardExcluded: Set<String> = emptySet()) =
         participant(KLAUS, longTerm, hardExcluded)
@@ -344,6 +346,42 @@ class DecisionEngineTest {
         assertTrue(result.allSurviving.isEmpty())
     }
 
+    // ── v0.9.4 修复回归：条件页选「都可以」(ANY) 曾把所有候选过滤光，
+    // 首次生成就提示"候选已经看完了"且"重新看看这些选项"无效 ──
+
+    // 双人 + ANY：候选全部保留，正常出推荐（用户上报的原始场景）
+    @Test
+    fun mealModeAny_doesNotFilterAnyCandidate() {
+        val bothWant = mapOf(KLAUS to SelectionType.WANT, QING to SelectionType.WANT)
+        val result = engine.recommend(
+            candidates = listOf(
+                candidate("hotpot", selections = bothWant),
+                candidate("noodle", selections = bothWant)
+            ),
+            participants = listOf(klausWith(), qingWith()),
+            context = context(mealModes = setOf(MealMode.ANY)),
+            history = emptyList()
+        )
+        assertFalse(result.exhausted)
+        assertNotNull(result.recommended)
+        assertEquals(2, result.allSurviving.size)
+    }
+
+    // ANY 语义 = 不限用餐方式：只支持「在家做」的候选也不应被过滤
+    @Test
+    fun mealModeAny_homeCookCandidateSurvives() {
+        val homeOnly = candidate("home", mealModes = setOf(MealMode.COOK_HOME))
+        val result = engine.recommend(
+            candidates = listOf(homeOnly),
+            participants = listOf(klausWith()),
+            context = context(mealModes = setOf(MealMode.ANY)),
+            history = emptyList()
+        )
+        assertFalse(result.exhausted)
+        assertNotNull(result.recommended)
+        assertEquals(1, result.allSurviving.size)
+    }
+
     // 状态匹配加分：MATCH_MOOD 原因出现，且匹配项权重更高
     @Test
     fun moodMatch_addsBonusAndReason() {
@@ -376,5 +414,42 @@ class DecisionEngineTest {
         )
         assertTrue(result.exhausted)
         assertTrue(result.allSurviving.isEmpty())
+    }
+
+    // ── v0.9.0：距离偏好软评分（此前为假开关：收集但引擎零消费）──
+
+    @Test
+    fun distanceScore_nearby_favorsQuickOverDestination() {
+        // 「附近步行」：粉面/快餐形态加分，火锅/大餐形态减分
+        assertEquals(15, CategoryRules.distanceScore(setOf(CategoryAttribute.NOODLE), DistanceLevel.NEARBY_WALK))
+        assertEquals(-15, CategoryRules.distanceScore(setOf(CategoryAttribute.HOTPOT), DistanceLevel.NEARBY_WALK))
+        assertEquals(0, CategoryRules.distanceScore(setOf(CategoryAttribute.REGULAR_MEAL), DistanceLevel.NEARBY_WALK))
+        assertEquals(0, CategoryRules.distanceScore(setOf(CategoryAttribute.NOODLE), DistanceLevel.UNLIMITED))
+    }
+
+    @Test
+    fun distanceScore_farOk_reversesPreference() {
+        // 「远一点也可以」：值得专程的重餐加分，快餐减分
+        assertEquals(15, CategoryRules.distanceScore(setOf(CategoryAttribute.HOTPOT), DistanceLevel.FAR_OK))
+        assertEquals(-10, CategoryRules.distanceScore(setOf(CategoryAttribute.CONVENIENCE), DistanceLevel.FAR_OK))
+        // 30 分钟以内：同向轻倾向（减半）
+        assertEquals(8, CategoryRules.distanceScore(setOf(CategoryAttribute.FAST_FOOD), DistanceLevel.WITHIN_30_MIN))
+        assertEquals(-8, CategoryRules.distanceScore(setOf(CategoryAttribute.BBQ), DistanceLevel.WITHIN_30_MIN))
+    }
+
+    @Test
+    fun distanceLevel_affectsEngineWeights() {
+        // 引擎侧验证：同样两个候选，选「附近步行」后快餐权重应反超火锅
+        val hotpot = candidate("hotpot", attributes = setOf(CategoryAttribute.HOTPOT))
+        val noodle = candidate("noodle", attributes = setOf(CategoryAttribute.NOODLE))
+        val nearbyResult = engine.recommend(
+            candidates = listOf(hotpot, noodle),
+            participants = listOf(klausWith()),
+            context = context(distance = DistanceLevel.NEARBY_WALK),
+            history = emptyList()
+        )
+        val nearbyNoodle = nearbyResult.allSurviving.first { it.categoryId == "noodle" }.weight
+        val nearbyHotpot = nearbyResult.allSurviving.first { it.categoryId == "hotpot" }.weight
+        assertTrue("就近选择时粉面应反超火锅: $nearbyNoodle vs $nearbyHotpot", nearbyNoodle > nearbyHotpot)
     }
 }

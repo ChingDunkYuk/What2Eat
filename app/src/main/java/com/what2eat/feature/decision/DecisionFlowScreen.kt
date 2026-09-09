@@ -1058,17 +1058,19 @@ private fun RecommendationStep(
                 tint = MaterialTheme.colorScheme.outline
             )
             Text(
-                text = if (uiState.candidates.isEmpty()) {
-                    "今天没有符合所有条件的选择"
-                } else {
-                    "候选已经看完了"
+                text = when {
+                    uiState.candidates.isEmpty() -> "今天没有符合所有条件的选择"
+                    // 有候选、也有换过的记录 → 真的看完了
+                    uiState.rejectedIds.isNotEmpty() -> "候选已经看完了"
+                    // 有候选但一个都没被换过 → 是条件把候选全过滤了，不是看完了
+                    else -> "候选都没能通过本次条件\n试试放宽用餐方式或预算"
                 },
                 style = MaterialTheme.typography.titleLarge,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 16.dp)
             )
             Spacer(modifier = Modifier.height(24.dp))
-            if (uiState.candidates.isNotEmpty()) {
+            if (uiState.candidates.isNotEmpty() && uiState.rejectedIds.isNotEmpty()) {
                 Button(
                     onClick = { viewModel.resetRejectedAndRecompute() },
                     modifier = Modifier.fillMaxWidth()

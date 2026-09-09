@@ -474,6 +474,43 @@ object What2EatIcons {
         }
     }
 
+    /** 标签：圆头吊牌 + 穿绳孔（标签管理入口，v0.9.2） */
+    val Tag: ImageVector by lazy {
+        cute("Tag") {
+            // 吊牌轮廓（斜切六边形：左上斜边 → 上沿 → 右侧 → 下斜边 → 圆角收口）
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 2.2f,
+                strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(5.4f, 11.6f)
+                lineTo(11.6f, 5.4f)
+                quadTo(12.1f, 4.9f, 12.9f, 4.9f)
+                lineTo(17.4f, 4.9f)
+                quadTo(19.0f, 4.9f, 19.0f, 6.5f)
+                lineTo(19.0f, 11.0f)
+                quadTo(19.0f, 11.8f, 18.5f, 12.3f)
+                lineTo(12.4f, 18.4f)
+                quadTo(11.2f, 19.6f, 10.0f, 18.4f)
+                lineTo(5.6f, 14.0f)
+                quadTo(4.4f, 12.8f, 5.4f, 11.6f)
+                close()
+            }
+            // 穿绳孔
+            path(fill = SolidColor(Color.Black)) {
+                circlePath(15.0f, 8.8f, 1.15f)
+            }
+        }
+    }
+
+    /** 更多操作：竖排三点（v0.9.2 标签行菜单入口） */
+    val MoreVert: ImageVector by lazy {
+        cute("MoreVert") {
+            path(fill = SolidColor(Color.Black)) {
+                circlePath(12.0f, 5.8f, 1.7f)
+                circlePath(12.0f, 12.0f, 1.7f)
+                circlePath(12.0f, 18.2f, 1.7f)
+            }
+        }
+    }
+
     /** 添加：特粗圆头加号 */
     val Add: ImageVector by lazy {
         cute("Add") {

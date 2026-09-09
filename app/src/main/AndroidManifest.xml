@@ -54,6 +54,20 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+
+        <!-- v1.1.0：美团登录页（可选，提升店名抓取成功率；不导出，仅 App 内跳转） -->
+        <activity
+            android:name=".MeituanLoginActivity"
+            android:exported="false"
+            android:label="美团登录"
+            android:theme="@style/Theme.What2Eat" />
+
+        <!-- v1.2.3：yoda 验证墙人工通过页（全屏默认 UA 环境；不导出，仅 App 内跳转） -->
+        <activity
+            android:name=".VerifyPassActivity"
+            android:exported="false"
+            android:label="美团验证"
+            android:theme="@style/Theme.What2Eat" />
     </application>
 
 </manifest>

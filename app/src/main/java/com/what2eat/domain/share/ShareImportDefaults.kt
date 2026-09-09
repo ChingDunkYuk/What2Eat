@@ -53,14 +53,19 @@ object ShareImportDefaults {
 
     /**
      * 收件箱兜底名称：名称解析不出来时用作占位，之后在「待整理」里改名。
+     *
+     * v0.8.14：改为「待确认店铺·xx」中性占位。旧文案「来自xx的分享」与
+     * 平台分享模板文案（ShareTextParser.isPlatformTemplate 拒绝的对象）
+     * 完全相同——解析层刚把它拒掉，兜底层又原样放回，用户看到的还是
+     * 模板文案，无法区分「识别失败占位」与「误识别成模板」。
      */
     fun fallbackName(platform: SourcePlatform): String = when (platform) {
         SourcePlatform.DIANPING,
         SourcePlatform.MEITUAN,
         SourcePlatform.AMAP,
         SourcePlatform.BAIDU_MAP,
-        SourcePlatform.BROWSER -> "来自${platform.label}的分享"
-        else -> "待整理的分享"
+        SourcePlatform.BROWSER -> "待确认店铺·${platform.label}"
+        else -> "待确认的分享"
     }
 
     /**

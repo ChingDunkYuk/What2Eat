@@ -34,4 +34,15 @@ interface SavedOptionDao {
     /** 物理删除（仅允许未被历史引用的选项） */
     @Query("DELETE FROM saved_option WHERE id = :id")
     suspend fun delete(id: String)
+
+    // ── 备份/恢复（v0.9.3） ──
+
+    @Query("SELECT * FROM saved_option")
+    suspend fun getAll(): List<SavedOptionEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(entities: List<SavedOptionEntity>)
+
+    @Query("DELETE FROM saved_option")
+    suspend fun deleteAll()
 }

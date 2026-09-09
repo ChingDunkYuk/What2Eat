@@ -1,4 +1,6 @@
-﻿plugins {
+import java.util.Properties
+
+plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -10,12 +12,20 @@ android {
     namespace = "com.what2eat"
     compileSdk = 34
 
+    // v1.0.0：签名配置读取本地 keystore.properties（不入库；缺失时回落 unsigned 仍可构建）
+    val keystoreProperties = Properties()
+    val keystorePropertiesFile = file("keystore.properties")
+    val hasReleaseKeystore = keystorePropertiesFile.exists()
+    if (hasReleaseKeystore) {
+        keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+    }
+
     defaultConfig {
         applicationId = "com.what2eat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 23
-        versionName = "0.8.7"
+        versionCode = 49
+        versionName = "1.2.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -23,13 +33,29 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // v1.0.0：R8 代码混淆/优化 + 资源收缩（已排查：无反射/JS 接口/动态资源，安全）
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
@@ -44,6 +70,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
@@ -55,6 +82,15 @@ android {
 
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+// v0.9.3：Room 2.6.1 传递依赖会把 symbol-processing-api 拉低到 1.9.x，
+// 导致 KSP 用旧内核解析 Kotlin 2.0 项目时把 kotlinx.serialization 解析为
+// error.NonExistentClass——强制对齐到与 KSP 插件一致的版本
+configurations.all {
+    resolutionStrategy {
+        force("com.google.devtools.ksp:symbol-processing-api:2.0.20-1.0.25")
+    }
 }
 
 dependencies {
@@ -95,6 +131,10 @@ dependencies {
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    // JSON（v0.9.3 备份/恢复）：运行时用 Android 内置 org.json；
+    // 单测需真实实现（Android stub 会抛 "not mocked"）
+    testImplementation("org.json:json:20240303")
 
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")

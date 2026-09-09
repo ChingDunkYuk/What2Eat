@@ -1,6 +1,7 @@
 package com.what2eat.domain.engine
 
 import com.what2eat.domain.model.BudgetLevel
+import com.what2eat.domain.model.DistanceLevel
 import com.what2eat.domain.model.MealMode
 import com.what2eat.domain.model.MoodTag
 import com.what2eat.domain.model.SelectionType
@@ -41,11 +42,13 @@ data class ParticipantPreference(
 
 /**
  * 决策引擎输入：本次决定的上下文条件。
+ * v0.9.0：新增 distanceLevel——此前条件页收集并持久化，但引擎零消费（假开关）。
  */
 data class DecisionContext(
     val mealModes: Set<MealMode> = emptySet(),
     val moodTags: Set<MoodTag> = emptySet(),
-    val budgetLevel: BudgetLevel = BudgetLevel.UNLIMITED
+    val budgetLevel: BudgetLevel = BudgetLevel.UNLIMITED,
+    val distanceLevel: DistanceLevel = DistanceLevel.UNLIMITED
 )
 
 /**

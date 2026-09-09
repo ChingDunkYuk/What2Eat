@@ -39,4 +39,12 @@ interface FoodCategoryDao {
 
     @Query("UPDATE food_category SET enabled = :enabled, updatedAt = :updatedAt WHERE id = :id")
     suspend fun setEnabled(id: String, enabled: Boolean, updatedAt: Long = System.currentTimeMillis())
+
+    // ── 备份/恢复（v0.9.3） ──
+
+    @Query("SELECT * FROM food_category")
+    suspend fun getAll(): List<FoodCategoryEntity>
+
+    @Query("DELETE FROM food_category")
+    suspend fun deleteAll()
 }

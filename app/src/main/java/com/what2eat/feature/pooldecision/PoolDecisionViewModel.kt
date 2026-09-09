@@ -22,6 +22,7 @@ import com.what2eat.domain.repository.SavedOptionRepository
 import com.what2eat.domain.search.PlatformSearchLauncher
 import com.what2eat.domain.search.SearchLauncher
 import com.what2eat.domain.search.SearchPlatform
+import com.what2eat.domain.search.SearchQueryBuilder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -129,11 +130,9 @@ class PoolDecisionViewModel @Inject constructor(
 
     /** 一次性加载所有启用人物对各选项的具体偏好（池规模小，进入/数据变化时执行） */
     private suspend fun loadPreferences() {
-        val result = mutableMapOf<String, List<PersonOptionPreference>>()
-        for (opt in options) {
-            result[opt.id] = savedOptionRepository.getPreferences(opt.id)
-        }
-        preferencesByOption = result
+        // v0.9.1：批量化取数——一次全量查询内存 groupBy 替代逐选项查询（N 次 → 1 次）
+        preferencesByOption = savedOptionRepository.getAllPreferences()
+            .groupBy { it.savedOptionId }
     }
 
     // ── 候选与推荐 ──
@@ -273,8 +272,11 @@ class PoolDecisionViewModel @Inject constructor(
     // ── 完成态搜索承接（复用历史页模式）──
 
     fun showSearchPanel() {
-        val name = _uiState.value.currentOption?.name ?: return
-        _uiState.update { it.copy(showSearchPanel = true, searchQuery = name.trim()) }
+        val option = _uiState.value.currentOption ?: return
+        // v0.9.0：区域拼进搜索词（Stage 3.1 遗留——areaText 此前恒不参与，
+        // 「区域 店名」能显著提升找店命中率，如「番禺区 文通冰室」）
+        val query = SearchQueryBuilder.build(option.name, option.areaText).query
+        _uiState.update { it.copy(showSearchPanel = true, searchQuery = query) }
     }
 
     fun hideSearchPanel() {

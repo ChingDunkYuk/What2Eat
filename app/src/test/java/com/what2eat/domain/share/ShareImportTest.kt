@@ -427,15 +427,17 @@ class ShareImportTest {
 
     @Test
     fun `fallback name uses platform label for meituan and dianping`() {
-        assertEquals("来自美团的分享", ShareImportDefaults.fallbackName(SourcePlatform.MEITUAN))
-        assertEquals("来自大众点评的分享", ShareImportDefaults.fallbackName(SourcePlatform.DIANPING))
-        assertEquals("来自高德地图的分享", ShareImportDefaults.fallbackName(SourcePlatform.AMAP))
+        // v0.8.14：中性占位（旧文案「来自xx的分享」与平台模板文案相同，
+        // 解析层拒绝模板后兜底层又放回，用户无法区分识别失败与误识别）
+        assertEquals("待确认店铺·美团", ShareImportDefaults.fallbackName(SourcePlatform.MEITUAN))
+        assertEquals("待确认店铺·大众点评", ShareImportDefaults.fallbackName(SourcePlatform.DIANPING))
+        assertEquals("待确认店铺·高德地图", ShareImportDefaults.fallbackName(SourcePlatform.AMAP))
     }
 
     @Test
     fun `fallback name for unknown platform is generic`() {
-        assertEquals("待整理的分享", ShareImportDefaults.fallbackName(SourcePlatform.OTHER))
-        assertEquals("待整理的分享", ShareImportDefaults.fallbackName(SourcePlatform.NONE))
+        assertEquals("待确认的分享", ShareImportDefaults.fallbackName(SourcePlatform.OTHER))
+        assertEquals("待确认的分享", ShareImportDefaults.fallbackName(SourcePlatform.NONE))
     }
 
     @Test
@@ -479,7 +481,7 @@ class ShareImportTest {
             importStatus = ImportStatus.NEEDS_REVIEW
         )
         assertEquals(ImportStatus.NEEDS_REVIEW, inbox.importStatus)
-        assertEquals("来自大众点评的分享", inbox.name)
+        assertEquals("待确认店铺·大众点评", inbox.name)
 
         // 2) 整理：编辑保存（markCompleted=true）→ COMPLETE，移出待整理
         val organized = FoodOptionForm.buildOption(

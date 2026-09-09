@@ -85,6 +85,10 @@ class DecisionSessionRepositoryImpl @Inject constructor(
         return participantDao.getBySession(sessionId).map { it.toDomain() }
     }
 
+    override suspend fun getAllParticipants(): List<SessionParticipant> {
+        return participantDao.getAll().map { it.toDomain() }
+    }
+
     override suspend fun setParticipants(sessionId: String, participants: List<SessionParticipant>) {
         participantDao.deleteBySession(sessionId)
         participantDao.upsertAll(participants.map { it.toEntity() })

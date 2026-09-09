@@ -27,4 +27,15 @@ interface SessionCategorySelectionDao {
 
     @Query("DELETE FROM session_category_selection WHERE sessionId = :sessionId")
     suspend fun deleteBySession(sessionId: String)
+
+    // ── 备份/恢复（v0.9.3） ──
+
+    @Query("SELECT * FROM session_category_selection")
+    suspend fun getAll(): List<SessionCategorySelectionEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(entities: List<SessionCategorySelectionEntity>)
+
+    @Query("DELETE FROM session_category_selection")
+    suspend fun deleteAll()
 }

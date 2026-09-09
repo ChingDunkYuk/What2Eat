@@ -8,3 +8,7 @@
 .externalNativeBuild
 .cxx
 app/build
+
+# v1.0.0：签名密钥不入库
+/app/keystore.properties
+/app/keystore/

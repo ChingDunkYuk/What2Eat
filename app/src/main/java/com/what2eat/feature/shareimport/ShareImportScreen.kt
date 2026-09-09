@@ -31,6 +31,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,15 +46,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.what2eat.core.designsystem.icon.What2EatIcons
+import com.what2eat.data.share.FetchDebugLog
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import com.what2eat.VerifyPassActivity
 import com.what2eat.domain.model.CollectionType
 import com.what2eat.domain.model.SavedOptionType
 import com.what2eat.domain.share.DuplicateCheckResult
 import com.what2eat.domain.share.ShareImportDefaults
+import kotlinx.coroutines.delay
 
 /**
  * 分享收件确认页（收件箱模式）。
@@ -151,14 +166,21 @@ fun ShareImportScreen(
                 isError = state.nameError != null,
                 supportingText = state.nameError?.let { { Text(it) } }
                     ?: when {
-                        // 后台正在抓链接标题补店名
-                        state.isResolvingName -> { { Text("正在识别店名…") } }
-                        state.name.isBlank() -> { { Text("未识别到店名，将使用「$fallbackName」") } }
+                        // 后台正在抓链接标题补店名（美团分享文字不带店名，
+                        // 只能靠链接抓取，多候选最坏约 30 秒；不打断手动输入）
+                        state.isResolvingName -> { { Text("正在从链接识别店名（约30秒），也可现在直接输入") } }
+                        // 抓取已结束仍为空 → 美团反爬墙拦截，明确引导手动输入
+                        state.name.isBlank() -> {
+                            { Text("未能自动获取店名（美团限制），请直接输入；留空将用「$fallbackName」") }
+                        }
                         else -> null
                     },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            // v1.1.0：抓取诊断面板（无 adb 排障）——店名拿不到时展开看抓取链走到哪步
+            FetchDebugPanel(isResolvingName = state.isResolvingName)
 
             // 类型（可留空，默认按来源推断）
             Text("类型（可稍后改）", style = MaterialTheme.typography.titleSmall)
@@ -256,6 +278,108 @@ fun ShareImportScreen(
                 TextButton(onClick = viewModel::consumeDuplicate) { Text("取消") }
             }
         )
+    }
+
+    // v1.2.3：yoda 验证墙人工通过（全屏 Activity + 默认系统 UA——Dialog 内嵌 +
+    // 微信 UA 会触发 yoda 反自动化破坏，滑块故意渲染残缺；通过后自动重试抓取）
+    val context = LocalContext.current
+    val verifyLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            // v1.2.4：通过后落地店铺页可直接带回店名（非空则免重试）
+            viewModel.onVerifyPassed(result.data?.getStringExtra(VerifyPassActivity.EXTRA_SHOP_NAME))
+        } else {
+            viewModel.onVerifyDismissed()
+        }
+    }
+    LaunchedEffect(state.verifyUrl) {
+        state.verifyUrl?.let { url ->
+            verifyLauncher.launch(
+                Intent(context, VerifyPassActivity::class.java)
+                    .putExtra(VerifyPassActivity.EXTRA_PAGE_URL, url)
+            )
+        }
+    }
+}
+
+/**
+ * v1.1.0：抓取诊断面板（无 adb 排障）。
+ *
+ * 店名拿不到时点「抓取诊断」展开，实时显示抓取链日志（代理响应码/cookie/
+ * 数据接口 URL/JS 回调/护栏判定）。截图发回即可远程定位。
+ * 抓取中每 800ms 刷新，结束后定格。
+ */
+@Composable
+private fun FetchDebugPanel(isResolvingName: Boolean) {
+    var expanded by remember { mutableStateOf(false) }
+    var logs by remember { mutableStateOf(FetchDebugLog.snapshot()) }
+    val clipboard = LocalClipboardManager.current
+    var copied by remember { mutableStateOf(false) }
+
+    // 抓取中或面板展开时定时刷新日志快照
+    LaunchedEffect(expanded, isResolvingName) {
+        while (expanded || isResolvingName) {
+            logs = FetchDebugLog.snapshot()
+            delay(800)
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (expanded) "收起抓取诊断 ▲" else "抓取诊断 ▼（店名识别失败时点我）",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        if (expanded) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp)
+                    .background(
+                        MaterialTheme.colorScheme.surfaceVariant,
+                        RoundedCornerShape(8.dp)
+                    )
+                    .padding(10.dp)
+            ) {
+                if (logs.isEmpty()) {
+                    Text(
+                        "暂无日志",
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    logs.takeLast(20).forEach { line ->
+                        Text(
+                            text = line,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 15.sp
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            clipboard.setText(AnnotatedString(logs.joinToString("\n")))
+                            copied = true
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                    ) {
+                        Text(if (copied) "已复制，粘贴发我" else "复制全部日志")
+                    }
+                }
+            }
+        }
     }
 }
 

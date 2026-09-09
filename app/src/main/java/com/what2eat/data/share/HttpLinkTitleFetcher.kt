@@ -1,11 +1,9 @@
 package com.what2eat.data.share
 
-import android.content.Context
 import com.what2eat.domain.share.HtmlTitleExtractor
 import com.what2eat.domain.share.LinkTitleFetcher
 import com.what2eat.domain.share.MeituanEvokeResolver
 import com.what2eat.domain.share.SchemeUrlExtractor
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -16,33 +14,46 @@ import javax.inject.Singleton
 import kotlin.math.min
 
 /**
- * 链接标题抓取（无第三方依赖）：两阶段策略（v0.8.6）。
+ * 链接标题抓取（无第三方依赖）：两阶段策略（v0.8.6），移动 UA 统一（v0.8.9）。
  *
  * 阶段一 HttpURLConnection 轻量链路（省流量、快）：
- * - 手动跟随重定向（覆盖 http↔https 协议切换）
- * - App 唤起 scheme（imeituan://）→ 提取落地 https 页继续
- * - 唤起页标题无效（纯平台名）→ poiId 构造候选页入队（点评 H5 优先、美团 POI 页次之）
- * - 反爬验证页标题（「身份核实」等）由 domain 层护栏拒绝
+ * - 原始链接：手动跟随重定向，App 唤起 scheme → 提取落地 https 页继续
+ * - 唤起页标题无效（纯平台名/壳页/验证页）→ poiId 构造候选页入队
+ * - v0.8.9：撤掉 v0.8.8 的桌面 UA 实验——桌面版店铺页实测已全失效
+ *   （点评 301 到登录页、美团 301 到营销页），全部请求统一移动 UA
  *
  * 阶段二 WebView 兜底（阶段一全空时）：
- * - 真实浏览器内核执行 JS——美团/点评店铺页标题为 SPA 客户端渲染，
- *   纯 HTTP 抓到的 <title> 常为空，这是此前美团链接拿不到店名的关键原因；
- * - 自带 Cookie 与浏览器指纹，反爬通过率显著高于裸 HTTP；
- * - 目标依次为：阶段一派生的候选页（美团唤起链）或原链接（普通分享）。
+ * - 真实浏览器内核执行 JS + Cookie——SPA 客户端渲染的唯一解法；
+ * - v0.8.9：WebView 内新增 SPA DOM 店名采集（og:title/h1/class*=shopName），
+ *   覆盖「壳 title 固定、店名只在 DOM」的 meishi.meituan.com POI 页；
+ * - 双层拦截非 http(s) scheme（shouldOverrideUrlLoading 主导航 +
+ *   shouldInterceptRequest iframe），WebViewTitleFetcher 内实现。
  *
  * 一切异常 → null（调用方静默回退手动填写，不阻塞不报错）。
  */
 @Singleton
 class HttpLinkTitleFetcher @Inject constructor(
-    @ApplicationContext private val appContext: Context,
     private val webViewTitleFetcher: WebViewTitleFetcher
 ) : LinkTitleFetcher {
 
     override suspend fun fetchTitle(url: String): String? = withContext(Dispatchers.IO) {
-        val (httpTitle, candidates) = resolveHttp(url)
-        if (httpTitle != null) return@withContext httpTitle
-        // 阶段二：WebView 兜底（候选页优先；普通分享则用原链接）
+        // v1.1.0：dpurl.cn 短链是 http://，Android 9+ 默认禁 cleartext HTTP——
+        // 升级为 https:// 再请求（dpurl.cn 支持 https，302 链不变）
+        val startUrl = if (url.startsWith("http://", ignoreCase = true)) {
+            "https://" + url.substringAfter("://")
+        } else {
+            url
+        }
+        if (startUrl != url) FetchDebugLog.add("http→https: $startUrl")
+        FetchDebugLog.add("HTTP阶段开始: $startUrl")
+        val (httpTitle, candidates) = resolveHttp(startUrl)
+        if (httpTitle != null) {
+            FetchDebugLog.add("HTTP命中: $httpTitle")
+            return@withContext httpTitle
+        }
+        // 阶段二：WebView 兜底（阶段一全空时）
         val targets = if (candidates.isEmpty()) listOf(url) else candidates
+        FetchDebugLog.add("HTTP无结果,转WebView,候选${targets.size}个")
         targets.firstNotNullOfOrNull { target ->
             runCatching { webViewTitleFetcher.fetchTitle(target) }.getOrNull()
         }
@@ -64,22 +75,38 @@ class HttpLinkTitleFetcher @Inject constructor(
             // 单条候选：跟随重定向直到拿到页面或断链
             while (requests < MAX_TOTAL_REQUESTS) {
                 requests++
-                val conn = (URL(current).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = TIMEOUT_MS
-                    readTimeout = TIMEOUT_MS
-                    instanceFollowRedirects = false
-                    setRequestProperty("User-Agent", MOBILE_UA)
-                    setRequestProperty("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
-                    setRequestProperty("Accept-Encoding", "identity")
-                    setRequestProperty("Referer", "https://www.meituan.com/")
+                // v0.8.11 防御：URL 构造/openConnection 抛异常（畸形跳转地址等）
+                // 不得冒泡——这是分享流程协程链上的一环，异常会杀掉确认页进程
+                val connResult = runCatching {
+                    (URL(current).openConnection() as HttpURLConnection).apply {
+                        connectTimeout = TIMEOUT_MS
+                        readTimeout = TIMEOUT_MS
+                        instanceFollowRedirects = false
+                        setRequestProperty("User-Agent", MOBILE_UA)
+                        setRequestProperty("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
+                        setRequestProperty("Accept-Encoding", "identity")
+                        setRequestProperty("Referer", "https://www.meituan.com/")
+                    }
+                }
+                val conn = connResult.getOrNull()
+                if (conn == null) {
+                    FetchDebugLog.add("连接失败: ${connResult.exceptionOrNull()?.javaClass?.simpleName}: ${connResult.exceptionOrNull()?.message}")
+                    break
                 }
                 try {
-                    when (conn.responseCode) {
+                    val code = runCatching { conn.responseCode }.getOrElse { e ->
+                        FetchDebugLog.add("读响应失败: ${e.javaClass.simpleName}: ${e.message}")
+                        -1
+                    }
+                    if (code == -1) break
+                    FetchDebugLog.add("HTTP $code ${current.take(70)}")
+                    when (code) {
                         in 300..399 -> {
                             val location = conn.getHeaderField("Location") ?: break
+                            FetchDebugLog.add("  跳转: ${location.take(60)}")
                             current = if (location.startsWith("http://", true) || location.startsWith("https://", true)) {
                                 // 相对/绝对地址基于当前 URL 解析
-                                URL(URL(current), location).toString()
+                                runCatching { URL(URL(current), location).toString() }.getOrNull() ?: break
                             } else {
                                 // App 唤起 scheme → 提取落地 https 页，提取不到断链
                                 SchemeUrlExtractor.extractLandingUrl(location) ?: break
@@ -88,19 +115,21 @@ class HttpLinkTitleFetcher @Inject constructor(
                         HttpURLConnection.HTTP_OK -> {
                             val title = readTitle(conn)
                             if (title != null) return title to candidates
-                            // 唤起页标题无效（纯平台名/空/验证页）→ 候选页入队，继续外层循环
+                            FetchDebugLog.add("  200但标题无效(壳/验证页)")
+                            // 唤起页标题无效（纯平台名/壳页/验证页）→ 候选页入队，继续外层循环
                             if (MeituanEvokeResolver.isEvokePage(current)) {
                                 MeituanEvokeResolver.extractPoiH5Urls(current).forEach {
                                     if (it !in candidates) candidates.add(it)
                                     queue.add(it)
                                 }
+                                FetchDebugLog.add("  唤起页,派生候选${candidates.size}个")
                             }
                             break
                         }
                         else -> break
                     }
                 } finally {
-                    conn.disconnect()
+                    runCatching { conn.disconnect() }
                 }
             }
         }
@@ -112,18 +141,21 @@ class HttpLinkTitleFetcher @Inject constructor(
         if (!contentType.isNullOrBlank() && !contentType.contains("html", ignoreCase = true)) {
             return null
         }
-        val bytes = conn.inputStream.use { input ->
-            val buffer = ByteArray(MAX_READ_BYTES)
-            var len = 0
-            while (len < buffer.size) {
-                val n = input.read(buffer, len, buffer.size - len)
-                if (n < 0) break
-                len += n
-                // 已读到 </title> → 提前停止，不浪费流量
-                if (containsBytes(buffer, len, TITLE_END_BYTES)) break
+        // v0.8.11 防御：读流/解码异常不得冒泡（协程链上抛出会杀确认页进程）
+        val bytes = runCatching {
+            conn.inputStream.use { input ->
+                val buffer = ByteArray(MAX_READ_BYTES)
+                var len = 0
+                while (len < buffer.size) {
+                    val n = input.read(buffer, len, buffer.size - len)
+                    if (n < 0) break
+                    len += n
+                    // 已读到 </title> → 提前停止，不浪费流量
+                    if (containsBytes(buffer, len, TITLE_END_BYTES)) break
+                }
+                buffer.copyOf(len)
             }
-            buffer.copyOf(len)
-        }
+        }.getOrNull() ?: return null
         val charset = charsetFromContentType(contentType)
             ?: charsetFromMeta(bytes)
             ?: Charsets.UTF_8
