@@ -52,6 +52,12 @@ interface SavedOptionRepository {
     /** 物理删除（仅未被历史引用的选项） */
     suspend fun delete(id: String)
 
+    /** v1.3.0：批量确认入库（importStatus 置 COMPLETE，与编辑保存同语义） */
+    suspend fun markCompleted(ids: List<String>)
+
+    /** v1.3.0：批量物理删除（仅未被历史引用的选项；调用方先过滤被引用项） */
+    suspend fun deleteByIds(ids: List<String>)
+
     // ── 标签 ──
 
     /** 观察所有选项标签（用于池页搜索/展示） */

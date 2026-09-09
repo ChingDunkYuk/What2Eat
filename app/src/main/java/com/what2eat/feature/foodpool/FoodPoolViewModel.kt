@@ -42,7 +42,10 @@ data class FoodPoolUiState(
     val sort: PoolSort = PoolSort.RECENTLY_ADDED,
     val query: String = "",
     /** 全池「待整理」数量（分享收件后待确认的选项），用于 Tab 角标提醒 */
-    val reviewCount: Int = 0
+    val reviewCount: Int = 0,
+    /** v1.3.0：待整理多选整理模式（仅 NEEDS_REVIEW Tab 可进入） */
+    val selectionMode: Boolean = false,
+    val selectedIds: Set<String> = emptySet()
 )
 
 @HiltViewModel
@@ -120,7 +123,10 @@ class FoodPoolViewModel @Inject constructor(
                     selectedTab = tab,
                     sort = sort,
                     query = query,
-                    reviewCount = options.count { it.importStatus == ImportStatus.NEEDS_REVIEW }
+                    reviewCount = options.count { it.importStatus == ImportStatus.NEEDS_REVIEW },
+                    // v1.3.0：选择态跨数据刷新保留（批量操作对失效 id 天然容忍，无需裁剪）
+                    selectionMode = _uiState.value.selectionMode,
+                    selectedIds = _uiState.value.selectedIds
                 )
             }.collect { state ->
                 _uiState.value = state
@@ -130,6 +136,61 @@ class FoodPoolViewModel @Inject constructor(
 
     fun selectTab(tab: PoolTab) {
         selectedTab.value = tab
+        clearSelection()
+    }
+
+    // ── v1.3.0：待整理多选整理 ──
+
+    /** 长按进入选择态（仅待整理 Tab 由 UI 触发） */
+    fun enterSelection(id: String) {
+        _uiState.value = _uiState.value.copy(selectionMode = true, selectedIds = setOf(id))
+    }
+
+    fun toggleSelection(id: String) {
+        val s = _uiState.value
+        if (!s.selectionMode) return
+        val next = if (id in s.selectedIds) s.selectedIds - id else s.selectedIds + id
+        // 选空自动退出选择态
+        _uiState.value = s.copy(selectionMode = next.isNotEmpty(), selectedIds = next)
+    }
+
+    /** 全选当前可见列表（items 已是当前 Tab/搜索过滤结果） */
+    fun selectAllVisible() {
+        val s = _uiState.value
+        if (!s.selectionMode) return
+        _uiState.value = s.copy(selectedIds = s.items.map { it.id }.toSet())
+    }
+
+    fun clearSelection() {
+        _uiState.value = _uiState.value.copy(selectionMode = false, selectedIds = emptySet())
+    }
+
+    /** 批量确认入库：选中项 importStatus 置 COMPLETE（与编辑保存同语义，不动名称/标签） */
+    fun batchCompleteSelected() {
+        val ids = _uiState.value.selectedIds.toList()
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            runCatching { repository.markCompleted(ids) }
+            clearSelection()
+        }
+    }
+
+    /**
+     * 批量删除：先过滤被历史引用项（与单删语义一致——被引用项物理删除不允许，
+     * 跳过并汇总），其余物理删除（FK CASCADE 清关联）。
+     */
+    fun batchDeleteSelected(onDone: (deleted: Int, skipped: Int) -> Unit) {
+        val ids = _uiState.value.selectedIds.toList()
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            val deletable = ids.filter { id ->
+                runCatching { !repository.isReferencedByHistory(id) }.getOrDefault(false)
+            }
+            val skipped = ids.size - deletable.size
+            runCatching { repository.deleteByIds(deletable) }
+            clearSelection()
+            onDone(deletable.size, skipped)
+        }
     }
 
     fun setSort(sort: PoolSort) {

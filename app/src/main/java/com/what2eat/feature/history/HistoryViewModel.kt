@@ -4,8 +4,13 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.what2eat.domain.history.HistoryDateGrouper
+import com.what2eat.domain.history.HistoryFilter
+import com.what2eat.domain.history.HistoryFilterState
+import com.what2eat.domain.history.HistoryModeFilter
 import com.what2eat.domain.history.HistoryStatEntry
 import com.what2eat.domain.history.HistoryStatsCalculator
+import com.what2eat.domain.history.HistoryTimeFilter
+import com.what2eat.domain.history.MonthlyReportCalculator
 import com.what2eat.domain.model.DecisionMode
 import com.what2eat.domain.model.SessionStatus
 import com.what2eat.domain.repository.DecisionSessionRepository
@@ -58,6 +63,12 @@ class HistoryViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(HistoryUiState())
     val uiState: StateFlow<HistoryUiState> = _uiState.asStateFlow()
 
+    // v1.3.0：历史筛选状态流。
+    // 必须声明在 init { observeHistory() } 之前——Kotlin 属性按声明顺序初始化，
+    // viewModelScope 是 Main.immediate，init 启动的协程构造期间即执行 combine，
+    // 若 filterFlow 声明在 init 之后，combine 收集到 null 流 → NPE（v1.3.0 历史页闪退根因）。
+    private val filterFlow = MutableStateFlow(HistoryFilterState())
+
     init {
         observeHistory()
     }
@@ -98,13 +109,29 @@ class HistoryViewModel @Inject constructor(
         )
     }
 
+    // ── v1.3.0：历史筛选（时间/人物/模式） ──
+
+    fun setTimeFilter(time: HistoryTimeFilter) {
+        filterFlow.value = filterFlow.value.copy(time = time)
+    }
+
+    fun setPersonFilter(personName: String?) {
+        filterFlow.value = filterFlow.value.copy(personName = personName)
+    }
+
+    fun setModeFilter(mode: HistoryModeFilter) {
+        filterFlow.value = filterFlow.value.copy(mode = mode)
+    }
+
     private fun observeHistory() {
         viewModelScope.launch {
             combine(
                 sessionRepository.observeAllSessions(),
-                personProfileRepository.observeEnabled()
-            ) { sessions, profiles ->
+                personProfileRepository.observeEnabled(),
+                filterFlow
+            ) { sessions, profiles, filter ->
                 val profileByName = profiles.associateBy { it.id }
+                val personNames = profiles.map { it.name }
                 val completed = sessions
                     .filter {
                         it.status == SessionStatus.COMPLETED &&
@@ -112,7 +139,12 @@ class HistoryViewModel @Inject constructor(
                     }
                     .sortedByDescending { it.completedAt ?: it.createdAt }
 
-                if (completed.isEmpty()) return@combine HistoryUiState(isLoading = false, isEmpty = true)
+                if (completed.isEmpty()) return@combine HistoryUiState(
+                    isLoading = false,
+                    isEmpty = true,
+                    filter = filter,
+                    personNames = personNames
+                )
 
                 // v0.9.1：批量化取数——三张查找表一次取齐，
                 // 替代循环内逐条查询（2N+1 次 → 3 次固定查询）
@@ -142,23 +174,43 @@ class HistoryViewModel @Inject constructor(
                         rerollCount = session.rerollCount,
                         participants = participants,
                         // v0.9.0：池决策记录携带区域（「再次搜索」用）
-                        areaText = option?.areaText
+                        areaText = option?.areaText,
+                        // v1.3.0：模式筛选维度
+                        isPoolDecision = session.decisionMode == DecisionMode.POOL_FIRST
                     )
                 }
 
-                // v0.8.1：统计 + 按日分组
+                val nowMillis = System.currentTimeMillis()
+                // v0.8.1：统计（全量口径，不受筛选影响）+ v1.3.0 月度报告（同数据源）
+                val statEntries = items.map {
+                    HistoryStatEntry(
+                        name = it.categoryName,
+                        completedAt = it.completedAt,
+                        rerollCount = it.rerollCount
+                    )
+                }
                 val stats = HistoryStatsCalculator.compute(
-                    entries = items.map {
-                        HistoryStatEntry(
-                            name = it.categoryName,
-                            completedAt = it.completedAt,
-                            rerollCount = it.rerollCount
-                        )
-                    },
-                    nowMillis = System.currentTimeMillis()
+                    entries = statEntries,
+                    nowMillis = nowMillis
                 )
+                val monthlyReport = MonthlyReportCalculator.compute(statEntries, nowMillis)
+
+                // v1.3.0：筛选只作用于时间线（统计卡/月报保持全量口径，避免互扰）
+                val filteredItems = if (filter.isDefault) {
+                    items
+                } else {
+                    items.filter {
+                        HistoryFilter.matches(
+                            state = filter,
+                            completedAt = it.completedAt,
+                            participantNames = it.participants,
+                            isPoolDecision = it.isPoolDecision,
+                            nowMillis = nowMillis
+                        )
+                    }
+                }
                 val groups = HistoryDateGrouper
-                    .groupByDay(items, { it.completedAt })
+                    .groupByDay(filteredItems, { it.completedAt })
                     .map { group ->
                         HistoryGroupView(label = dayLabel(group.epochDay), items = group.items)
                     }
@@ -167,7 +219,10 @@ class HistoryViewModel @Inject constructor(
                     isLoading = false,
                     groups = groups,
                     stats = stats,
-                    isEmpty = items.isEmpty()
+                    isEmpty = items.isEmpty(),
+                    filter = filter,
+                    personNames = personNames,
+                    monthlyReport = monthlyReport
                 )
             }
                 .distinctUntilChanged()

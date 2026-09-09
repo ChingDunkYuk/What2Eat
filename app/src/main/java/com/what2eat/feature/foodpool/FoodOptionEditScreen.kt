@@ -207,6 +207,25 @@ fun FoodOptionEditScreen(
                 modifier = Modifier.fillMaxWidth().field(tagsField)
             )
 
+            // v1.3.0：标签联想 chips（按使用数降序；已在 tags 中的不再出现；点选即填入）
+            val visibleSuggestions = state.tagSuggestions.filter { it !in state.tags }
+            if (visibleSuggestions.isNotEmpty()) {
+                Text(
+                    "点选快速填入",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    visibleSuggestions.forEach { tag ->
+                        FilterChip(
+                            selected = false,
+                            onClick = { viewModel.addTagSuggestion(tag) },
+                            label = { Text(tag) }
+                        )
+                    }
+                }
+            }
+
             // 区域
             OutlinedTextField(
                 value = state.areaText,

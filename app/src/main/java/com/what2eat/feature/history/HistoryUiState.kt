@@ -1,5 +1,7 @@
 package com.what2eat.feature.history
 
+import com.what2eat.domain.history.HistoryFilterState
+import com.what2eat.domain.history.MonthlyReport
 import com.what2eat.domain.history.HistoryStats
 
 /**
@@ -7,17 +9,24 @@ import com.what2eat.domain.history.HistoryStats
  * Stage 2.2 封版：最小历史展示。
  * Stage 3.2：新增"再次搜索"平台面板状态。
  * v0.8.1：新增统计卡状态；列表由扁平 items 改为按日分组 groups。
+ * v1.3.0：新增三维筛选状态（filter/personNames）与月度报告（monthlyReport）。
  */
 data class HistoryUiState(
     val isLoading: Boolean = true,
-    /** 按日分组的时间线（组内时间降序） */
+    /** 按日分组的时间线（组内时间降序；已应用筛选） */
     val groups: List<HistoryGroupView> = emptyList(),
-    /** 统计卡数据（加载完成且有历史时非 null） */
+    /** 统计卡数据（加载完成且有历史时非 null；全量口径，不受筛选影响） */
     val stats: HistoryStats? = null,
     val isEmpty: Boolean = false,
     val showSearchPanel: Boolean = false,
     val searchQuery: String = "",
-    val searchMessage: String? = null
+    val searchMessage: String? = null,
+    /** v1.3.0：当前筛选（时间/人物/模式；只影响时间线） */
+    val filter: HistoryFilterState = HistoryFilterState(),
+    /** v1.3.0：人物筛选项（enabled 人物名） */
+    val personNames: List<String> = emptyList(),
+    /** v1.3.0：月度吃饭报告（全量口径；无历史时为 null） */
+    val monthlyReport: MonthlyReport? = null
 )
 
 /**
@@ -43,5 +52,7 @@ data class HistoryItem(
     val decisionModeText: String,
     val rerollCount: Int,
     val participants: List<String>,
-    val areaText: String? = null
+    val areaText: String? = null,
+    /** v1.3.0：是否池决策（模式筛选用；默认 false 兼容既有构造） */
+    val isPoolDecision: Boolean = false
 )

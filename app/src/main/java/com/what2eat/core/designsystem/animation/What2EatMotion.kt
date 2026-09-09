@@ -9,8 +9,10 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -59,6 +61,38 @@ fun Modifier.bounceClickable(
             indication = LocalIndication.current,
             enabled = enabled,
             onClick = onClick
+        )
+}
+
+/**
+ * v1.3.0：bounceClickable 的长按变体（待整理多选：单击选择/长按进入选择态）。
+ * 与 bounceClickable 同一按压回弹手感，手势层换成 combinedClickable。
+ */
+@OptIn(ExperimentalFoundationApi::class)
+fun Modifier.bounceCombinedClickable(
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    pressedScale: Float = 0.955f,
+    enabled: Boolean = true
+): Modifier = composed {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) pressedScale else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "bouncePressScale"
+    )
+    this
+        .graphicsLayer { scaleX = scale; scaleY = scale }
+        .combinedClickable(
+            interactionSource = interactionSource,
+            indication = LocalIndication.current,
+            enabled = enabled,
+            onClick = onClick,
+            onLongClick = onLongClick
         )
 }
 

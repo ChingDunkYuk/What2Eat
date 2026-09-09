@@ -4,6 +4,8 @@ import com.what2eat.core.designsystem.icon.What2EatIcons
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,7 +20,9 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -29,7 +33,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -39,7 +45,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.what2eat.R
+import com.what2eat.domain.history.HistoryFilterState
+import com.what2eat.domain.history.HistoryModeFilter
 import com.what2eat.domain.history.HistoryStats
+import com.what2eat.domain.history.HistoryTimeFilter
+import com.what2eat.domain.history.MonthlyReport
 import com.what2eat.feature.common.PlatformSearchSheet
 
 /**
@@ -57,6 +67,8 @@ fun HistoryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    // v1.3.0：月度报告 Sheet
+    var showMonthlyReport by remember { mutableStateOf(false) }
 
     // 展示平台承接结果提示
     LaunchedEffect(uiState.searchMessage) {
@@ -135,10 +147,30 @@ fun HistoryScreen(
                             )
                         }
 
+                        // ── v1.3.0：三维筛选（时间/人物/模式；统计卡与月报保持全量口径） ──
+                        item(key = "filters") {
+                            HistoryFilterRow(
+                                filter = uiState.filter,
+                                personNames = uiState.personNames,
+                                onTime = viewModel::setTimeFilter,
+                                onPerson = viewModel::setPersonFilter,
+                                onMode = viewModel::setModeFilter
+                            )
+                        }
+
                         // ── v0.8.1：统计卡 ──
                         uiState.stats?.let { stats ->
                             item(key = "stats") {
                                 StatsCard(stats = stats)
+                            }
+                        }
+
+                        // ── v1.3.0：月度报告入口 ──
+                        if (uiState.monthlyReport != null) {
+                            item(key = "monthly_report_entry") {
+                                TextButton(onClick = { showMonthlyReport = true }) {
+                                    Text("月度报告")
+                                }
                             }
                         }
 
@@ -160,6 +192,17 @@ fun HistoryScreen(
                                 )
                             }
                         }
+
+                        // v1.3.0：筛选后无记录提示
+                        if (uiState.groups.isEmpty()) {
+                            item(key = "filtered_empty") {
+                                Text(
+                                    text = "没有符合当前筛选的记录",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 16.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -174,6 +217,108 @@ fun HistoryScreen(
             onPlatformSearch = viewModel::onPlatformSearch,
             onCopySearch = viewModel::onCopySearch
         )
+    }
+
+    // v1.3.0：月度吃饭报告
+    if (showMonthlyReport) {
+        uiState.monthlyReport?.let { report ->
+            MonthlyReportSheet(report = report, onDismiss = { showMonthlyReport = false })
+        }
+    }
+}
+
+/**
+ * v1.3.0：历史三维筛选行（时间/模式/人物；全部默认时等价于不过滤）。
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun HistoryFilterRow(
+    filter: HistoryFilterState,
+    personNames: List<String>,
+    onTime: (HistoryTimeFilter) -> Unit,
+    onPerson: (String?) -> Unit,
+    onMode: (HistoryModeFilter) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HistoryTimeFilter.entries.forEach { t ->
+                FilterChip(
+                    selected = filter.time == t,
+                    onClick = { onTime(t) },
+                    label = { Text(t.label) }
+                )
+            }
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HistoryModeFilter.entries.forEach { m ->
+                FilterChip(
+                    selected = filter.mode == m,
+                    onClick = { onMode(m) },
+                    label = { Text(m.label) }
+                )
+            }
+        }
+        if (personNames.isNotEmpty()) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = filter.personName == null,
+                    onClick = { onPerson(null) },
+                    label = { Text("全部人物") }
+                )
+                personNames.forEach { name ->
+                    FilterChip(
+                        selected = filter.personName == name,
+                        onClick = { onPerson(name) },
+                        label = { Text(name) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * v1.3.0：月度吃饭报告 Sheet（仿标签管理面板的 ModalBottomSheet 模式）。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MonthlyReportSheet(report: MonthlyReport, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp)
+        ) {
+            Text(
+                text = "${report.monthLabel} 吃饭报告",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            if (report.totalDecisions == 0) {
+                Text(
+                    text = "本月还没有决定记录",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    text = "本月共决定 ${report.totalDecisions} 次" +
+                        (report.prevMonthTotal?.let { "（上月 $it 次）" } ?: "")
+                )
+                Text(text = "换一个率 ${(report.swapRate * 100).toInt()}%")
+                if (report.topItems.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(text = "最常吃：", fontWeight = FontWeight.SemiBold)
+                    report.topItems.forEachIndexed { index, (name, count) ->
+                        Text(
+                            text = "${index + 1}. $name ×$count",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

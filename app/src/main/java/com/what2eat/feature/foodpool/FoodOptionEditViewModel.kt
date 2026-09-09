@@ -32,7 +32,9 @@ data class FoodOptionFormState(
     val nameError: String? = null,
     val isSaving: Boolean = false,
     val saved: Boolean = false,
-    val hasChanges: Boolean = false
+    val hasChanges: Boolean = false,
+    /** v1.3.0：标签联想建议（按使用数降序，编辑时排除已在 tags 中的） */
+    val tagSuggestions: List<String> = emptyList()
 ) {
     /** 名称已 trim 且非空，可保存 */
     val canSave: Boolean get() = name.isNotBlank()
@@ -55,6 +57,17 @@ class FoodOptionEditViewModel @Inject constructor(
     fun load(optionId: String?) {
         if (loaded) return
         loaded = true
+        viewModelScope.launch {
+            // v1.3.0：标签联想建议（observeTagUsage 已按使用数降序，取前 12；
+            // 新增/编辑都需要，不依赖 optionId）
+            val suggestions = runCatching {
+                repository.observeTagUsage().first()
+                    .map { it.name }
+                    .filter { it.isNotBlank() }
+                    .take(12)
+            }.getOrDefault(emptyList())
+            _uiState.value = _uiState.value.copy(tagSuggestions = suggestions)
+        }
         if (optionId == null) return
         viewModelScope.launch {
             val option = repository.getById(optionId) ?: return@launch
@@ -100,6 +113,13 @@ class FoodOptionEditViewModel @Inject constructor(
 
     fun onTagsChange(tags: Set<String>) {
         _uiState.value = _uiState.value.copy(tags = LinkedHashSet(tags), hasChanges = true)
+    }
+
+    /** v1.3.0：点选建议标签填入（LinkedHashSet 保序去重；已存在则忽略） */
+    fun addTagSuggestion(tag: String) {
+        val s = _uiState.value
+        if (tag.isBlank() || tag in s.tags) return
+        _uiState.value = s.copy(tags = LinkedHashSet(s.tags + tag), hasChanges = true)
     }
 
     fun save() {

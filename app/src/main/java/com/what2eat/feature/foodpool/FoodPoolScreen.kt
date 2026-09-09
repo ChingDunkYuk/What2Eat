@@ -1,11 +1,14 @@
 package com.what2eat.feature.foodpool
 
 import com.what2eat.core.designsystem.animation.bounceClickable
+import com.what2eat.core.designsystem.animation.bounceCombinedClickable
 import com.what2eat.core.designsystem.animation.bouncyPress
 import com.what2eat.core.designsystem.animation.entranceBounce
 import com.what2eat.core.designsystem.animation.gentleBob
 import com.what2eat.core.designsystem.icon.What2EatIcons
 
+import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,6 +27,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -32,9 +38,12 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -44,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -68,27 +78,70 @@ fun FoodPoolScreen(
 
     // v0.9.2：标签管理面板
     var showTagManage by remember { mutableStateOf(false) }
+    // v1.3.0：批量删除二次确认 + 结果 Toast
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.food_pool_title)) },
-                actions = {
-                    IconButton(onClick = { showTagManage = true }) {
-                        Icon(What2EatIcons.Tag, contentDescription = "标签管理")
+            if (uiState.selectionMode) {
+                // v1.3.0：待整理多选态顶栏
+                TopAppBar(
+                    title = { Text("已选 ${uiState.selectedIds.size} 项") },
+                    navigationIcon = {
+                        TextButton(onClick = viewModel::clearSelection) { Text("取消") }
+                    },
+                    actions = {
+                        TextButton(onClick = viewModel::selectAllVisible) { Text("全选") }
+                    }
+                )
+            } else {
+                TopAppBar(
+                    title = { Text(stringResource(R.string.food_pool_title)) },
+                    actions = {
+                        IconButton(onClick = { showTagManage = true }) {
+                            Icon(What2EatIcons.Tag, contentDescription = "标签管理")
+                        }
+                    }
+                )
+            }
+        },
+        // v1.3.0：多选态底栏（批量确认入库/删除）
+        bottomBar = {
+            if (uiState.selectionMode) {
+                Surface(shadowElevation = 8.dp) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { showDeleteConfirm = true },
+                            enabled = uiState.selectedIds.isNotEmpty(),
+                            modifier = Modifier.weight(1f)
+                        ) { Text("删除(${uiState.selectedIds.size})") }
+                        Button(
+                            onClick = viewModel::batchCompleteSelected,
+                            enabled = uiState.selectedIds.isNotEmpty(),
+                            modifier = Modifier.weight(1.4f)
+                        ) { Text("确认入库(${uiState.selectedIds.size})") }
                     }
                 }
-            )
+            }
         },
         floatingActionButton = {
-            // v0.9.4：FAB 按压弹性回缩
-            val fabInteraction = remember { MutableInteractionSource() }
-            FloatingActionButton(
-                onClick = onAddClick,
-                interactionSource = fabInteraction,
-                modifier = Modifier.bouncyPress(fabInteraction)
-            ) {
-                Icon(What2EatIcons.Add, contentDescription = "添加")
+            if (!uiState.selectionMode) {
+                // v0.9.4：FAB 按压弹性回缩
+                val fabInteraction = remember { MutableInteractionSource() }
+                FloatingActionButton(
+                    onClick = onAddClick,
+                    interactionSource = fabInteraction,
+                    modifier = Modifier.bouncyPress(fabInteraction)
+                ) {
+                    Icon(What2EatIcons.Add, contentDescription = "添加")
+                }
             }
         }
     ) { innerPadding ->
@@ -175,9 +228,23 @@ fun FoodPoolScreen(
                     ) {
                         // v0.9.4：交错入场（首屏最多 8 项参与 stagger，长列表不拖沓）
                         itemsIndexed(uiState.items, key = { _, option -> option.id }) { index, option ->
+                            // v1.3.0：待整理 Tab 长按进选择态；选择态下单击切换勾选
+                            val reviewTab = uiState.selectedTab == PoolTab.NEEDS_REVIEW
                             OptionCard(
                                 option = option,
-                                onClick = { onOptionClick(option) },
+                                selected = uiState.selectionMode && option.id in uiState.selectedIds,
+                                onClick = {
+                                    if (uiState.selectionMode) {
+                                        viewModel.toggleSelection(option.id)
+                                    } else {
+                                        onOptionClick(option)
+                                    }
+                                },
+                                onLongClick = if (reviewTab && !uiState.selectionMode) {
+                                    { viewModel.enterSelection(option.id) }
+                                } else {
+                                    null
+                                },
                                 entranceDelayMillis = index.coerceAtMost(8) * 45
                             )
                         }
@@ -191,6 +258,31 @@ fun FoodPoolScreen(
     if (showTagManage) {
         TagManageSheet(onDismiss = { showTagManage = false })
     }
+
+    // v1.3.0：批量删除二次确认（被历史引用项自动跳过并 Toast 汇总）
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("删除选中的 ${uiState.selectedIds.size} 项？") },
+            text = { Text("被历史决策引用过的项会自动跳过；删除不可撤销") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    viewModel.batchDeleteSelected { deleted, skipped ->
+                        val msg = if (skipped > 0) {
+                            "已删除 $deleted 项，$skipped 项被历史引用已跳过"
+                        } else {
+                            "已删除 $deleted 项"
+                        }
+                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                    }
+                }) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("取消") }
+            }
+        )
+    }
 }
 
 /**
@@ -200,15 +292,23 @@ fun FoodPoolScreen(
 private fun OptionCard(
     option: SavedOption,
     onClick: () -> Unit,
-    entranceDelayMillis: Int = 0
+    entranceDelayMillis: Int = 0,
+    selected: Boolean = false,
+    onLongClick: (() -> Unit)? = null
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .entranceBounce(key = option.id, delayMillis = entranceDelayMillis)
-            .bounceClickable(onClick),
+            .bounceCombinedClickable(onClick = onClick, onLongClick = onLongClick),
+        // v1.3.0：多选态选中高亮（主色描边 + 浅主色底）
+        border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = if (selected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            }
         )
     ) {
         Row(

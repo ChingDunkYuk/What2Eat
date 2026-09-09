@@ -1,9 +1,13 @@
 package com.what2eat.feature.decision
 
+import com.what2eat.core.designsystem.animation.bounceClickable
+import com.what2eat.core.designsystem.animation.bouncyPress
+import com.what2eat.core.designsystem.animation.entranceBounce
 import com.what2eat.core.designsystem.icon.What2EatBackIcon
 import com.what2eat.core.designsystem.icon.What2EatIcons
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -372,9 +377,11 @@ private fun ConditionsStep(
             )
             uiState.availableProfiles.forEach { profile ->
                 val selected = uiState.selectedParticipantIds.contains(profile.id)
+                // v1.3.0：按压回弹（动效铺开）
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { viewModel.toggleParticipant(profile.id) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .bounceClickable(onClick = { viewModel.toggleParticipant(profile.id) }),
                     colors = CardDefaults.cardColors(
                         containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
                         else MaterialTheme.colorScheme.surfaceVariant
@@ -459,9 +466,11 @@ private fun ConditionsStep(
         )
         BudgetLevel.entries.forEach { level ->
             val selected = uiState.budgetLevel == level
+            // v1.3.0：按压回弹（动效铺开）
             Card(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { viewModel.setBudget(level) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .bounceClickable(onClick = { viewModel.setBudget(level) }),
                 colors = CardDefaults.cardColors(
                     containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
                     else MaterialTheme.colorScheme.surfaceVariant
@@ -491,9 +500,11 @@ private fun ConditionsStep(
         )
         DistanceLevel.entries.forEach { level ->
             val selected = uiState.distanceLevel == level
+            // v1.3.0：按压回弹（动效铺开）
             Card(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { viewModel.setDistance(level) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .bounceClickable(onClick = { viewModel.setDistance(level) }),
                 colors = CardDefaults.cardColors(
                     containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
                     else MaterialTheme.colorScheme.surfaceVariant
@@ -529,11 +540,15 @@ private fun ConditionsStep(
             )
         }
 
-        // 底部统一按钮
+        // 底部统一按钮（v1.3.0：按压弹性回缩）
+        val confirmInteraction = remember { MutableInteractionSource() }
         Button(
             onClick = { viewModel.confirmConditions() },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !uiState.isSaving
+            modifier = Modifier
+                .fillMaxWidth()
+                .bouncyPress(confirmInteraction),
+            enabled = !uiState.isSaving,
+            interactionSource = confirmInteraction
         ) {
             if (uiState.isSaving) {
                 CircularProgressIndicator(
@@ -598,9 +613,14 @@ private fun HandoffStep(
 
         Spacer(modifier = Modifier.height(32.dp))
 
+        // v1.3.0：按压弹性回缩
+        val handoffInteraction = remember { MutableInteractionSource() }
         Button(
             onClick = { viewModel.startHandoffSelection() },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .bouncyPress(handoffInteraction),
+            interactionSource = handoffInteraction
         ) {
             Text("${nextPerson?.name ?: ""}开始选择")
         }
@@ -717,7 +737,8 @@ private fun CategorySelectStep(
             }
         }
 
-        // 底部生成候选按钮（IME 弹出时自动上移，不被遮挡）
+        // 底部生成候选按钮（IME 弹出时自动上移，不被遮挡；v1.3.0：按压弹性回缩）
+        val generateInteraction = remember { MutableInteractionSource() }
         Button(
             onClick = {
                 keyboardController?.hide()
@@ -725,10 +746,12 @@ private fun CategorySelectStep(
             },
             modifier = Modifier
                 .fillMaxWidth()
+                .bouncyPress(generateInteraction)
                 .navigationBarsPadding()
                 .imePadding()
                 .padding(16.dp),
-            enabled = uiState.currentWantCount + uiState.currentAcceptCount > 0
+            enabled = uiState.currentWantCount + uiState.currentAcceptCount > 0,
+            interactionSource = generateInteraction
         ) {
             Text("生成候选")
         }
@@ -942,10 +965,16 @@ private fun ResultsStep(
                 ),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(uiState.candidates) { candidate ->
+                // v1.3.0：候选卡交错入场（动效铺开）
+                itemsIndexed(uiState.candidates) { index, candidate ->
                     val reasonLines = viewModel.getCandidateReasonLines(candidate)
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .entranceBounce(
+                                key = "candidate_${candidate.categoryName}",
+                                delayMillis = index.coerceAtMost(8) * 45
+                            ),
                         colors = CardDefaults.cardColors(
                             containerColor = when (candidate.rank) {
                                 0 -> MaterialTheme.colorScheme.primaryContainer
@@ -984,14 +1013,17 @@ private fun ResultsStep(
                 }
             }
 
-            // 生成最终推荐（Stage 2.2）
+            // 生成最终推荐（Stage 2.2；v1.3.0：按压弹性回缩）
+            val recommendInteraction = remember { MutableInteractionSource() }
             Button(
                 onClick = { viewModel.generateRecommendation() },
                 modifier = Modifier
                     .fillMaxWidth()
+                    .bouncyPress(recommendInteraction)
                     .navigationBarsPadding()
                     .imePadding()
-                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 0.dp)
+                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 0.dp),
+                interactionSource = recommendInteraction
             ) {
                 Icon(What2EatIcons.Check, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.size(8.dp))
@@ -1130,9 +1162,11 @@ private fun RecommendationStep(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // 推荐原因
+        // 推荐原因（v1.3.0：换一个后新结果重新弹入）
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .entranceBounce(key = "reason_${recommendation.categoryName}"),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant
             )
@@ -1168,10 +1202,14 @@ private fun RecommendationStep(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // 操作按钮
+        // 操作按钮（v1.3.0：按压弹性回缩）
+        val eatInteraction = remember { MutableInteractionSource() }
         Button(
             onClick = { viewModel.confirmRecommendation() },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .bouncyPress(eatInteraction),
+            interactionSource = eatInteraction
         ) {
             Text("就吃这个")
         }
@@ -1184,10 +1222,15 @@ private fun RecommendationStep(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
+            // v1.3.0：按压弹性回缩
+            val rerollInteraction = remember { MutableInteractionSource() }
             OutlinedButton(
                 onClick = { viewModel.rerollRecommendation() },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !uiState.isComputingRecommendation
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .bouncyPress(rerollInteraction),
+                enabled = !uiState.isComputingRecommendation,
+                interactionSource = rerollInteraction
             ) {
                 Icon(What2EatIcons.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.size(8.dp))

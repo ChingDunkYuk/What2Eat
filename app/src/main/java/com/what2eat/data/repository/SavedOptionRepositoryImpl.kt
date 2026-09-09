@@ -100,6 +100,19 @@ class SavedOptionRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun markCompleted(ids: List<String>) {
+        if (ids.isEmpty()) return
+        optionDao.updateImportStatus(ids, ImportStatus.COMPLETE.ordinal, System.currentTimeMillis())
+    }
+
+    override suspend fun deleteByIds(ids: List<String>) {
+        if (ids.isEmpty()) return
+        database.withTransaction {
+            // CASCADE 会自动清理 collection / tag / preference 关联（与单删一致）
+            optionDao.deleteByIds(ids)
+        }
+    }
+
     override fun observeAllTags(): Flow<Map<String, List<String>>> =
         tagDao.observeAll().map { list ->
             list.groupBy({ it.savedOptionId }, { it.tagId })

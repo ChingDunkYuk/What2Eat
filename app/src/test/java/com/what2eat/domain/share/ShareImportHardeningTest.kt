@@ -417,14 +417,15 @@ class ShareImportHardeningTest {
         // 2026-09 实测 dpurl.cn/cgDhxzyz 的真实跳转链：
         // 302 → https://w.dianping.com/cube/evoke/meituan.html?url=imeituan%3A%2F%2F...poiId%3D1475979044...
         val evokeUrl = "https://w.dianping.com/cube/evoke/meituan.html?url=imeituan%3A%2F%2Fwww.meituan.com%2Fmrn%3Fmrn_biz%3Dmeishi%26mrn_entry%3Dfood-poi%26mrn_component%3Dfood-poi%26poiId%3D1475979044%26poiIdEncrypt%3DqB4r177c7fa207bf95e364a737925473600ee8e63d7684a26106e19f7129f9272bd6cd6c1ba1daedb6bc7d73647c5ff6vxu5&utm_source=appshare&utm_fromapp=more"
-        // v0.8.15：恢复三候选。v0.8.10 删点评候选是因为 302→scheme 唤起绕过
-        // 导航拦截；v0.8.11 主文档代理根除该盲区后，多点探测是安全的——
-        // 任何候选失败都只是「店名解析不出」，不会再把用户拽去美团 App。
+        // v1.1.3：候选重排（3 次真实分享抓取日志实测）——m.dianping.com 是唯一
+        // 无登录态直出店名标题的候选（yoda 不拦时 title 即店名），提为首选；
+        // i.meituan.com 几乎必撞 verify（快速失败成本低）居中；meishi 数据接口
+        // 需 SSO 登录态（无登录返回错误体）垫底。
         assertEquals(
             listOf(
+                "https://m.dianping.com/shop/1475979044",
                 "https://i.meituan.com/poi/1475979044",
-                "https://meishi.meituan.com/meishi/poi/index.html?isItoH5=true&poiId=1475979044",
-                "https://m.dianping.com/shop/1475979044"
+                "https://meishi.meituan.com/meishi/poi/index.html?isItoH5=true&poiId=1475979044"
             ),
             MeituanEvokeResolver.extractPoiH5Urls(evokeUrl)
         )

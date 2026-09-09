@@ -35,6 +35,14 @@ interface SavedOptionDao {
     @Query("DELETE FROM saved_option WHERE id = :id")
     suspend fun delete(id: String)
 
+    /** v1.3.0：批量更新导入状态（待整理批量确认入库） */
+    @Query("UPDATE saved_option SET importStatus = :status, updatedAt = :now WHERE id IN (:ids)")
+    suspend fun updateImportStatus(ids: List<String>, status: Int, now: Long)
+
+    /** v1.3.0：批量物理删除（仅未被历史引用的选项；FK CASCADE 清关联，与单删一致） */
+    @Query("DELETE FROM saved_option WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
+
     // ── 备份/恢复（v0.9.3） ──
 
     @Query("SELECT * FROM saved_option")
