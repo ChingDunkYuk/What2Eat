@@ -11,6 +11,7 @@ import com.what2eat.domain.history.HistoryStatEntry
 import com.what2eat.domain.history.HistoryStatsCalculator
 import com.what2eat.domain.history.HistoryTimeFilter
 import com.what2eat.domain.history.MonthlyReportCalculator
+import com.what2eat.domain.model.CollectionType
 import com.what2eat.domain.model.DecisionMode
 import com.what2eat.domain.model.SessionStatus
 import com.what2eat.domain.repository.DecisionSessionRepository
@@ -123,6 +124,16 @@ class HistoryViewModel @Inject constructor(
         filterFlow.value = filterFlow.value.copy(mode = mode)
     }
 
+    /** v1.4.0：所属列表筛选（null=全部） */
+    fun setCollectionFilter(collectionType: CollectionType?) {
+        filterFlow.value = filterFlow.value.copy(collectionType = collectionType)
+    }
+
+    /** v1.4.0：标签筛选（null=全部） */
+    fun setTagFilter(tagName: String?) {
+        filterFlow.value = filterFlow.value.copy(tagName = tagName)
+    }
+
     private fun observeHistory() {
         viewModelScope.launch {
             combine(
@@ -155,6 +166,12 @@ class HistoryViewModel @Inject constructor(
                 val categoryById = foodCategoryRepository.observeAll().first()
                     .associateBy { it.id }
 
+                // v1.4.0：列表/标签两张查找表一次取齐（池决策筛选维度；惯例同 v0.9.1）
+                val collectionsByOption = savedOptionRepository.observeAllCollections().first()
+                    .groupBy { it.savedOptionId }
+                    .mapValues { (_, list) -> list.map { it.collectionType }.toSet() }
+                val tagsByOption = savedOptionRepository.observeAllTags().first()
+
                 val items = completed.map { session ->
                     val participants = participantsBySession[session.id].orEmpty()
                         .sortedBy { it.selectionOrder }
@@ -176,7 +193,10 @@ class HistoryViewModel @Inject constructor(
                         // v0.9.0：池决策记录携带区域（「再次搜索」用）
                         areaText = option?.areaText,
                         // v1.3.0：模式筛选维度
-                        isPoolDecision = session.decisionMode == DecisionMode.POOL_FIRST
+                        isPoolDecision = session.decisionMode == DecisionMode.POOL_FIRST,
+                        // v1.4.0：列表/标签筛选维度（分类决策为空集）
+                        collections = option?.let { collectionsByOption[it.id] } ?: emptySet(),
+                        tags = option?.let { tagsByOption[it.id] }?.toSet() ?: emptySet()
                     )
                 }
 
@@ -205,7 +225,9 @@ class HistoryViewModel @Inject constructor(
                             completedAt = it.completedAt,
                             participantNames = it.participants,
                             isPoolDecision = it.isPoolDecision,
-                            nowMillis = nowMillis
+                            nowMillis = nowMillis,
+                            collections = it.collections,
+                            tags = it.tags
                         )
                     }
                 }
@@ -222,7 +244,11 @@ class HistoryViewModel @Inject constructor(
                     isEmpty = items.isEmpty(),
                     filter = filter,
                     personNames = personNames,
-                    monthlyReport = monthlyReport
+                    monthlyReport = monthlyReport,
+                    // v1.4.0：只展示历史中真实出现的维度值（减少空选项噪声）
+                    collectionFilters = items.flatMap { it.collections }.distinct()
+                        .sortedBy { it.ordinal },
+                    tagFilters = items.flatMap { it.tags }.distinct().sorted()
                 )
             }
                 .distinctUntilChanged()

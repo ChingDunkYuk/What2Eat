@@ -3,6 +3,7 @@ package com.what2eat.feature.history
 import com.what2eat.domain.history.HistoryFilterState
 import com.what2eat.domain.history.MonthlyReport
 import com.what2eat.domain.history.HistoryStats
+import com.what2eat.domain.model.CollectionType
 
 /**
  * 历史页 UI 状态。
@@ -26,7 +27,11 @@ data class HistoryUiState(
     /** v1.3.0：人物筛选项（enabled 人物名） */
     val personNames: List<String> = emptyList(),
     /** v1.3.0：月度吃饭报告（全量口径；无历史时为 null） */
-    val monthlyReport: MonthlyReport? = null
+    val monthlyReport: MonthlyReport? = null,
+    /** v1.4.0：列表筛选项（历史中出现过的所属列表，按枚举序） */
+    val collectionFilters: List<CollectionType> = emptyList(),
+    /** v1.4.0：标签筛选项（历史中出现过的标签名，字典序） */
+    val tagFilters: List<String> = emptyList()
 )
 
 /**
@@ -54,5 +59,9 @@ data class HistoryItem(
     val participants: List<String>,
     val areaText: String? = null,
     /** v1.3.0：是否池决策（模式筛选用；默认 false 兼容既有构造） */
-    val isPoolDecision: Boolean = false
+    val isPoolDecision: Boolean = false,
+    /** v1.4.0：池决策选项的所属列表（列表筛选用；分类决策为空集） */
+    val collections: Set<CollectionType> = emptySet(),
+    /** v1.4.0：池决策选项的标签（标签筛选用；分类决策为空集） */
+    val tags: Set<String> = emptySet()
 )

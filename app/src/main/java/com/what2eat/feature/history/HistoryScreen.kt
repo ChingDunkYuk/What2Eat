@@ -50,6 +50,7 @@ import com.what2eat.domain.history.HistoryModeFilter
 import com.what2eat.domain.history.HistoryStats
 import com.what2eat.domain.history.HistoryTimeFilter
 import com.what2eat.domain.history.MonthlyReport
+import com.what2eat.domain.model.CollectionType
 import com.what2eat.feature.common.PlatformSearchSheet
 
 /**
@@ -152,9 +153,13 @@ fun HistoryScreen(
                             HistoryFilterRow(
                                 filter = uiState.filter,
                                 personNames = uiState.personNames,
+                                collectionFilters = uiState.collectionFilters,
+                                tagFilters = uiState.tagFilters,
                                 onTime = viewModel::setTimeFilter,
                                 onPerson = viewModel::setPersonFilter,
-                                onMode = viewModel::setModeFilter
+                                onMode = viewModel::setModeFilter,
+                                onCollection = viewModel::setCollectionFilter,
+                                onTag = viewModel::setTagFilter
                             )
                         }
 
@@ -229,15 +234,20 @@ fun HistoryScreen(
 
 /**
  * v1.3.0：历史三维筛选行（时间/模式/人物；全部默认时等价于不过滤）。
+ * v1.4.0：新增所属列表/标签两行（无对应历史数据时不渲染）。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun HistoryFilterRow(
     filter: HistoryFilterState,
     personNames: List<String>,
+    collectionFilters: List<CollectionType>,
+    tagFilters: List<String>,
     onTime: (HistoryTimeFilter) -> Unit,
     onPerson: (String?) -> Unit,
-    onMode: (HistoryModeFilter) -> Unit
+    onMode: (HistoryModeFilter) -> Unit,
+    onCollection: (CollectionType?) -> Unit,
+    onTag: (String?) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -269,6 +279,40 @@ private fun HistoryFilterRow(
                     FilterChip(
                         selected = filter.personName == name,
                         onClick = { onPerson(name) },
+                        label = { Text(name) }
+                    )
+                }
+            }
+        }
+        // v1.4.0：所属列表维度（分类决策无列表，选中后自然只看池决策）
+        if (collectionFilters.isNotEmpty()) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = filter.collectionType == null,
+                    onClick = { onCollection(null) },
+                    label = { Text("全部列表") }
+                )
+                collectionFilters.forEach { c ->
+                    FilterChip(
+                        selected = filter.collectionType == c,
+                        onClick = { onCollection(c) },
+                        label = { Text(c.label) }
+                    )
+                }
+            }
+        }
+        // v1.4.0：标签维度（同上）
+        if (tagFilters.isNotEmpty()) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = filter.tagName == null,
+                    onClick = { onTag(null) },
+                    label = { Text("全部标签") }
+                )
+                tagFilters.forEach { name ->
+                    FilterChip(
+                        selected = filter.tagName == name,
+                        onClick = { onTag(name) },
                         label = { Text(name) }
                     )
                 }

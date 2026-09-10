@@ -1,5 +1,6 @@
 package com.what2eat.domain.history
 
+import com.what2eat.domain.model.CollectionType
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -22,8 +23,12 @@ class HistoryFilterTest {
         state: HistoryFilterState,
         completedAt: Long = nowMillis,
         participants: List<String> = listOf("klaus", "晴"),
-        isPool: Boolean = false
-    ): Boolean = HistoryFilter.matches(state, completedAt, participants, isPool, nowMillis)
+        isPool: Boolean = false,
+        collections: Set<CollectionType> = emptySet(),
+        tags: Set<String> = emptySet()
+    ): Boolean = HistoryFilter.matches(
+        state, completedAt, participants, isPool, nowMillis, collections, tags
+    )
 
     @Test
     fun `默认态全部通过`() {
@@ -85,6 +90,78 @@ class HistoryFilterTest {
                 completedAt = nowMillis - 8L * 24 * 60 * 60 * 1000,
                 participants = listOf("晴"),
                 isPool = true
+            )
+        )
+    }
+
+    // ── v1.4.0：列表/标签维度 ──
+
+    @Test
+    fun `列表维度 null 通过 命中通过 未命中拒绝`() {
+        val withCollection = setOf(CollectionType.FREQUENT, CollectionType.WANT_TO_TRY)
+        assertTrue(matches(HistoryFilterState(), collections = withCollection))
+        assertTrue(
+            matches(
+                HistoryFilterState(collectionType = CollectionType.FREQUENT),
+                collections = withCollection
+            )
+        )
+        assertFalse(
+            matches(
+                HistoryFilterState(collectionType = CollectionType.AVOIDED),
+                collections = withCollection
+            )
+        )
+    }
+
+    @Test
+    fun `列表维度下分类决策（空集）不匹配`() {
+        assertFalse(
+            matches(
+                HistoryFilterState(collectionType = CollectionType.FREQUENT),
+                isPool = false,
+                collections = emptySet()
+            )
+        )
+    }
+
+    @Test
+    fun `标签维度 null 通过 命中通过 未命中拒绝`() {
+        val tags = setOf("火锅", "潮汕")
+        assertTrue(matches(HistoryFilterState(), tags = tags))
+        assertTrue(matches(HistoryFilterState(tagName = "火锅"), tags = tags))
+        assertFalse(matches(HistoryFilterState(tagName = "日料"), tags = tags))
+        // 空集（分类决策）不匹配
+        assertFalse(matches(HistoryFilterState(tagName = "火锅"), tags = emptySet()))
+    }
+
+    @Test
+    fun `列表与标签组合需同时命中`() {
+        val state = HistoryFilterState(
+            collectionType = CollectionType.FREQUENT,
+            tagName = "火锅"
+        )
+        assertTrue(
+            matches(
+                state,
+                collections = setOf(CollectionType.FREQUENT),
+                tags = setOf("火锅")
+            )
+        )
+        // 只命中列表
+        assertFalse(
+            matches(
+                state,
+                collections = setOf(CollectionType.FREQUENT),
+                tags = setOf("日料")
+            )
+        )
+        // 只命中标签
+        assertFalse(
+            matches(
+                state,
+                collections = setOf(CollectionType.AVOIDED),
+                tags = setOf("火锅")
             )
         )
     }
