@@ -1,10 +1,14 @@
 # What2Eat
+
 <img width="400" height="800" alt="image" src="https://github.com/user-attachments/assets/b9645183-2109-4811-92d5-4863951ab6e8" />
 <img width="400" height="800" alt="image" src="https://github.com/user-attachments/assets/97a10d33-ab5d-4b2e-aa4f-5f6d7eb527a3" />
 
+> 一款帮助情侣共同决定「今晚吃什么」的 Android 应用。本地优先、开源、无账号。
+> An Android app that helps couples decide what to eat together. Local-first, open source, no accounts.
 
-> 一款帮助情侣共同决定“今晚吃什么”的 Android 应用。  
-> An Android app that helps couples decide what to eat together.
+[![Release](https://img.shields.io/github/v/release/ChingDunkYuk/What2Eat)](https://github.com/ChingDunkYuk/What2Eat/releases)
+[![Tests](https://img.shields.io/badge/JVM%20tests-271%20green)](CHANGELOG.md)
+[![minSdk](https://img.shields.io/badge/minSdk-26-blue)](app/build.gradle.kts)
 
 ---
 
@@ -12,310 +16,162 @@
 
 **What2Eat** 是一款面向情侣、伴侣以及有选择困难用户的本地优先型吃饭决策应用。
 
-它不是另一个餐厅点评平台，也不尝试维护庞大的商户数据库。
-
-What2Eat 更关注一个更简单、但每天都很真实的问题：
+它不是另一个餐厅点评平台，也不维护庞大的商户数据库。它只关注一个更简单、但每天都很真实的问题：
 
 > 今晚到底吃什么？
 
-应用通过双方偏好、当前状态、预算、用餐方式、历史记录和自建吃饭池，帮助用户快速形成一个可执行的共同决定。
+应用通过双方偏好、当前状态、预算、用餐方式、历史记录和自建吃饭池，快速形成一个可执行的共同决定；决定之后再把结果交给大众点评 / 美团 / 地图 / 浏览器去执行。
 
-**What2Eat** is a local-first meal decision app designed for couples, partners, and anyone who struggles with the daily question:
-
-> What should we eat tonight?
-
-Instead of becoming another restaurant review platform, What2Eat focuses on helping users reach a decision first, then hands the result off to maps, browsers, or food platforms for execution.
+Instead of becoming another restaurant review platform, What2Eat helps you **decide first**, then hands off to maps, browsers, or food platforms for execution.
 
 ---
 
-## 为什么做这个项目 / Why This Project
+## 为什么做这个项目 / Why
 
-很多情侣都会经历类似的对话：
+> 「今晚吃什么？」
+> 「都可以。」
+> 「那吃火锅？」
+> 「今天不太想。」
+> 「那你想吃什么？」
+> 「不知道。」
 
-> “今晚吃什么？”  
-> “都可以。”  
-> “那吃火锅？”  
-> “今天不太想。”  
-> “那你想吃什么？”  
-> “不知道。”
+问题通常不是「附近没有餐厅」，而是：双方没有明确目标、一直互相否定选项、收藏了很多店但真正决定时找不到、总在同几家店之间循环。
 
-问题通常不是“附近没有餐厅”，而是：
-
-- 双方没有明确目标
-- 一直互相否定选项
-- 最近吃过什么想不起来
-- 收藏了很多店，但真正决定时找不到
-- 总是在同几家店之间循环
-
-What2Eat 希望把这个过程从：
-
-`反复讨论`
-
-变成：
+What2Eat 把这个过程从 `反复讨论` 变成：
 
 `表达偏好 → 找共同候选 → 给出推荐 → 去找餐厅`
 
-Many couples face the same issue:
+---
 
-- neither person knows what they want
-- suggestions get rejected repeatedly
-- saved restaurants are scattered across different apps
-- the same few choices keep repeating
-- deciding takes longer than actually eating
+## 功能一览 / Features
 
-What2Eat turns the process into:
+### 双决策模式
+- **先决定吃什么**：本次条件（人物/用餐方式/状态/预算/距离）→ 双方分别选择（想吃/可以/不吃/都可以）→ 共同候选 → 最终推荐 → 外部平台搜索
+- **从吃饭池决定**：直接基于长期积累的个人数据决策，越用越懂你
+- 双人隐私交接（各自独立选择，互不干扰）、换一个、候选耗尽处理、加权随机 + 双人公平权重
 
-`preferences → shared candidates → recommendation → restaurant search`
+### 吃饭池（你的长期数据资产）
+- 六大列表：常吃 / 吃过 / 待尝试 / 外卖 / 在家做 / 踩雷
+- 标签（含联想 chips 与管理面板：重命名/合并/删除）、区域、预计用时、备注、原始链接
+- **待整理收件箱**：分享进来的店先收着，支持**长按多选批量确认入库/批量删除**
+- 具体人物独立偏好、长期不吃（硬排除）、停用/删除（历史引用保护）
+
+### 分享导入与店名识别（本项目最硬核的部分）
+从美团 / 大众点评 App 直接分享到 What2Eat，自动解析店铺链接并**抓取真实店名**：
+
+- dpurl.cn 短链解析 → HTTP 重定向链探测 → 唤起页 poiId 提取 → 多候选 URL 派生
+- **主文档代理**：WebView 永不自己请求主文档，302→`imeituan://` 唤起链在 Java 侧掐断（**绝不会把你拽回美团 App**）
+- JS 数据劫持：拦截美团数据接口 JSON 提取店名；多重护栏防止营销页/登录页/验证码标题被当店名
+- **验证墙人工通过**：撞风控墙时弹出全屏验证页，滑一次块 → 设备进入信任期 → 之后分享直接出店名
+- 一切失败安全兜底：拿不到店名就落「待整理」手动填，不阻塞收纳
+
+### 历史与统计
+- 统计卡（总决定/本月/平均换一个/最常吃 Top5）+ 按日分组时间线
+- **五维筛选**：时间（近 7 天/本月）/ 人物 / 模式 / 所属列表 / 标签
+- **月度吃饭报告**：本月次数、最常吃、换一率、上月环比
+- 再次搜索：任意历史记录一键回平台找店
+
+### 工程基建
+- 数据备份/恢复（SAF 导出导入，全 11 表 JSON，事务原子替换）
+- 弹跳微交互体系（按压回弹/交错入场/换一个重弹）
+- **崩溃捕获**：闪退后重开自动弹堆栈一键复制（无 adb 排障）
+- 抓取诊断面板：分享确认页内实时日志一键复制
 
 ---
 
-## 核心模式 / Core Modes
+## 下载 / Download
 
-### 1. 先决定吃什么 / Decide What to Eat First
+[**Releases 页面**](https://github.com/ChingDunkYuk/What2Eat/releases) 下载最新 APK，覆盖安装即可（签名一致，数据保留）。要求 Android 8.0（API 26）及以上。
 
-适合：
-
-- 不知道今天想吃什么
-- 想尝试新的餐厅
-- 两个人意见不统一
-- 还没有明确目标
-
-流程：
-
-`选择条件 → 双方分别选择 → 生成共同候选 → 最终推荐 → 外部平台搜索`
-
-Typical flow:
-
-`conditions → individual preferences → shared candidates → final recommendation → external search`
+完整版本历史见 [CHANGELOG.md](CHANGELOG.md)。
 
 ---
 
-### 2. 从我的吃饭池决定 / Decide from My Food Pool
+## 构建 / Build
 
-用户可以建立自己的“吃饭池”，保存：
+```bash
+# Debug（无需任何配置）
+./gradlew assembleDebug
 
-- 常吃
-- 吃过
-- 待尝试
-- 外卖
-- 在家做
-- 踩雷
+# 单元测试（271 项 JVM 测试）
+./gradlew testDebugUnitTest
 
-后续可以直接从自己的长期数据中做决策。
+# Release（需要自备签名密钥）
+./gradlew assembleRelease
+```
 
-Users can build a personal food pool containing:
-
-- Frequent
-- Visited
-- Want to Try
-- Takeout
-- Home Cooking
-- Avoided
-
-This turns What2Eat into a decision tool that becomes more useful over time.
-
----
-
-## 当前功能 / Current Features
-
-### 人物与偏好 / Profiles & Preferences
-
-- 单人模式
-- 双人模式
-- 主用户与另一半独立档案
-- 餐饮分类长期偏好
-- 具体吃饭选项独立偏好
-- 长期不吃 / Hard Exclusion
-
-### 决策流程 / Decision Flow
-
-- 用餐方式
-- 今日状态
-- 预算
-- 距离
-- 双方分别选择
-- 双人隐私交接
-- 共同候选生成
-- 加权推荐
-- 换一个
-- 候选耗尽处理
-
-### 推荐引擎 / Recommendation Engine
-
-推荐逻辑综合考虑：
-
-- 本次想吃 / 可以接受
-- 长期偏好
-- 当前状态
-- 用餐方式
-- 预算
-- 历史防重复
-- 双人公平权重
-- 加权随机
-
-The recommendation engine considers:
-
-- current WANT / ACCEPT selections
-- long-term preferences
-- current mood
-- meal mode
-- budget
-- recent history
-- couple fairness
-- weighted randomness
-
-### 外部搜索 / Search Handoff
-
-最终决定后可以：
-
-- 大众点评
-- 美团
-- 地图搜索
-- 浏览器搜索
-- 复制关键词
-
-What2Eat does not depend on any single third-party platform.
-
-### 吃饭池 / Food Pool
-
-支持管理：
-
-- 餐厅
-- 外卖商家
-- 在家做
-- 餐饮类型
-
-支持：
-
-- 多列表归属
-- 标签
-- 区域
-- 预计时间
-- 备注
-- 原始链接
-- 停用
-- 删除
-- 具体人物偏好
-
----
-
-## 当前开发进度 / Development Status
-
-## 当前开发进度 / Development Status
-
-| Version / Stage | 内容 / Feature | 状态 |
-|---|---|---|
-| Stage 0.1 | 项目骨架 / Project Foundation | ✅ |
-| Stage 1.1 | 双人物档案与长期偏好 / Profiles & Preferences | ✅ |
-| Stage 2.1 | 本次决策输入 / Decision Input | ✅ |
-| Stage 2.2 | 推荐引擎 / Recommendation Engine | ✅ |
-| Stage 3.1 | 通用搜索承接 / Generic Search Handoff | ✅ |
-| Stage 3.2 | 大众点评 / 美团承接 / Platform Handoff | ✅ |
-| Stage 4 | 我的吃饭池 / Food Pool | ✅ |
-| v0.7.x–0.8.x | Android 分享导入 / Share Import | ✅ |
-| v0.8.0 | 从吃饭池决定 / Food Pool Recommendation | ✅ |
-| v0.8.1 | 历史页升级 / History Upgrade | ✅ |
-| v0.9.0 | 体验补强 / UX Improvements | ✅ |
-| v0.9.1 | 性能优化 / Performance Optimization | ✅ |
-| v0.9.2 | 标签管理 / Tag Management | ✅ |
-| v0.9.3 | 数据备份与恢复 / Backup & Restore | ✅ |
-| v0.9.4 | UI 动效增强 / UI Motion Improvements | ✅ |
-| v1.0.0 | 首个 Release 基线 / First Release Baseline | ✅ |
-| v1.1.x | 美团店名识别强化 / Meituan Name Extraction Improvements | ✅ |
-| v1.2.0–v1.2.5 | 验证墙人工通过 + 抓取链完善 / Verification Flow & Share Parsing | ✅ |
-| v1.2.5 | 当前 Release Candidate | 🧪 真机最终回归中 |
-| v1.3.0 | 效率与统计增强 / Productivity & Statistics | 🗓️ Planned |
-
----
+Release 构建需自行准备签名：在 `app/keystore.properties` 填入你自己的 `storeFile/storePassword/keyAlias/keyPassword`
+（该文件与 `app/keystore/` 均被 .gitignore 排除，不会入库；仓库内不含任何真实密钥）。
 
 ## 技术栈 / Tech Stack
 
-- **Kotlin**
-- **Jetpack Compose**
-- **Material 3**
-- **Navigation Compose**
-- **Room**
-- **DataStore**
-- **ViewModel**
-- **StateFlow**
-- **Kotlin Coroutines**
-- **Kotlin Serialization**
+- **Kotlin** + **Jetpack Compose**（Material 3）+ **Navigation Compose**
+- **Room**（11 表，DB v7）+ **DataStore** + **Hilt**（DI）
+- **StateFlow / Coroutines**（viewModelScope 驱动）
+- **org.json**（备份序列化；刻意避开反射型序列化库以保 R8 兼容）
+- **WebView + HttpURLConnection**（分享店名抓取链：主文档代理/双层拦截/JS 数据劫持）
+- 纯 Kotlin 领域层（决策引擎 / 分享解析 / 历史统计 / 筛选判定均可 JVM 单测）
 
-Architecture:
-
-- UI Layer
-- Domain Layer
-- Data Layer
-
-The recommendation engine is designed as pure Kotlin logic and does not directly depend on Compose or Room.
+架构：`feature（UI）→ domain（纯 Kotlin 逻辑）→ data（Room/系统服务）`，领域逻辑不依赖 Compose 与 Room。
 
 ---
 
-## 项目原则 / Design Principles
+## 开发进度 / Status
 
-### Local First
+| 版本 | 内容 | 状态 |
+|---|---|---|
+| Stage 0 ~ 5 | 项目骨架 / 人物偏好 / 决策流 / 推荐引擎 / 吃饭池 | ✅ |
+| v0.7.x ~ 0.8.x | 分享导入 / 吃饭池决策 / 历史页升级 / 抓取防唤起 | ✅ |
+| v0.9.x | 体验补强 / 性能 / 标签管理 / 备份恢复 / UI 动效 | ✅ |
+| v1.0.0 | 首个签名 Release（R8，12.2MB→1.86MB） | ✅ |
+| v1.1.x | 美团店名抓取强化（JS 数据劫持 / 代理修复 / 护栏） | ✅ |
+| v1.2.x | **验证墙人工通过**（滑块信任期）+ 登录态修正 + GitHub 上线 | ✅ |
+| v1.3.x | 批量整理 / 标签联想 / 历史三维筛选 / 月报 / 崩溃捕获 / 闪退修复 | ✅ |
+| v1.4.0 | 历史筛选 +列表/标签维度（当前最新） | ✅ |
 
-核心数据默认保存在本地。
+---
 
-Core user data is stored locally by default.
+## 项目原则 / Principles
 
-### Decision First
-
-What2Eat 优先解决“做决定”，而不是展示海量餐厅。
-
-What2Eat focuses on decision-making rather than restaurant discovery.
-
-### User Data First
-
-用户自己保存的：
-
-- 常吃店
-- 待尝试
-- 踩雷
-- 在家做
-- 历史记录
-
-比第三方平台数据更重要。
-
-Your own food history and saved places are treated as the most valuable data source.
-
-### No Hard Dependency on External Platforms
-
-大众点评、美团、地图等只用于结果承接。
-
-If one platform becomes unavailable, What2Eat should still work.
+- **Local First**：核心数据只存本地，无账号无云同步，备份靠手动导出
+- **Decision First**：优先解决「做决定」，而不是展示海量餐厅
+- **User Data First**：自己存的店和历史，比任何平台数据都重要
+- **No Hard Dependency**：点评/美团/地图只用于结果承接，任何一家不可用 App 都照常工作
+- **唤起防护优先于功能**：宁可店名抓不到（手动填），绝不允许把用户拽去第三方 App
 
 ---
 
 ## 项目结构 / Project Structure
 
 ```text
-com.what2eat.app
-├── app
+com.what2eat
 ├── core
-│   ├── database
-│   ├── datastore
-│   ├── model
-│   ├── navigation
-│   ├── designsystem
-│   └── util
+│   ├── database          # Room 11 表 / DAO / 迁移
+│   ├── datastore         # 使用模式等偏好
+│   ├── designsystem      # 主题 / 图标 / 动效体系
+│   └── navigation        # NavHost
 ├── data
-│   ├── local
-│   ├── backup
-│   ├── parser
-│   └── repository
-├── domain
-│   ├── decision
-│   ├── filter
-│   ├── ranking
+│   ├── repository        # Repository 实现（Room 事务）
+│   ├── search            # 平台搜索承接
+│   └── share             # HTTP/WebView 店名抓取链（主文档代理/JS 劫持/诊断日志）
+├── domain                # 纯 Kotlin：决策引擎 / 分享解析 / 历史统计 / 筛选判定
+│   ├── engine
+│   ├── foodpool
+│   ├── history
 │   ├── share
-│   └── repository
-└── feature
-    ├── onboarding
-    ├── home
-    ├── decision
-    ├── foodpool
-    ├── history
-    ├── search
-    ├── shareimport
-    └── settings
+│   └── repository        # 接口
+└── feature               # Compose UI：home / decision / foodpool / history /
+                          #   pooldecision / shareimport / settings / onboarding
+```
+
+---
+
+## 隐私 / Privacy
+
+所有数据保存在设备本地（Room + DataStore），应用无后端、无账号、无埋点。
+分享导入功能仅抓取美团/点评的**公开网页**获取店名，不触碰任何账号数据；
+美团登录为可选实验功能，仅将 Cookie 存于本机 WebView。
+
+---
+
+如果它解决了你的「今晚吃什么」，欢迎 Star；问题与建议请提 [Issues](https://github.com/ChingDunkYuk/What2Eat/issues)。
