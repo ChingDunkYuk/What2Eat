@@ -5,6 +5,19 @@ What2Eat 的版本记录。格式：版本号（versionCode）｜日期｜要点
 
 ---
 
+## v1.5.0（54）｜2026-09-09
+
+### 优化
+- **历史页取数重构**（v0.9.1 批量化之上的第二层）：v1.3.0 起筛选流与数据流合并，
+  每点一次筛选 chip 都会重跑 5 次全量查询；现拆两层——数据层各自
+  `map + distinctUntilChanged`（仅数据变化才查库/重建查找表），组装层
+  `combine(dataFlow, filterFlow)` 纯内存计算，**筛选切换零数据库查询**；
+  participants 挂 sessions 流刷新（参与者随会话写入、会话表必同步变化）
+
+### 杂项清理
+- SettingsScreen `LocalLifecycleOwner` 过时告警迁移（androidx.lifecycle.compose）
+- ShareImportScreen 重复 import 清除；proguard-rules 注释与 v1.1.0 现实对齐
+
 ## v1.4.0（53）｜2026-09-09
 
 ### 新增

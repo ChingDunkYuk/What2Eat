@@ -3,8 +3,6 @@
 # 本项目无需额外 keep 规则，依据（v1.0.0 立项前已完成排查）：
 # - Room 2.6.1 / Hilt 2.52 / Compose BOM 均自带 consumer proguard 规则，
 #   实体、DAO、注入类全部被库方规则覆盖
-# - WebView 店名抓取仅用 evaluateJavascript（字符串脚本 + 回调），
-#   无 addJavascriptInterface、无 Class.forName 反射、无 @Keep
 # - 枚举以 ordinal 存库（entries.getOrElse 解析），无反射路径
 # - JSON 序列化用 Android 内置 org.json，非反射型库
 # - 无 getIdentifier 等动态资源查找（资源收缩安全）

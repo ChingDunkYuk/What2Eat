@@ -13,6 +13,11 @@ import com.what2eat.domain.history.HistoryTimeFilter
 import com.what2eat.domain.history.MonthlyReportCalculator
 import com.what2eat.domain.model.CollectionType
 import com.what2eat.domain.model.DecisionMode
+import com.what2eat.domain.model.DecisionSession
+import com.what2eat.domain.model.FoodCategory
+import com.what2eat.domain.model.PersonProfile
+import com.what2eat.domain.model.SavedOption
+import com.what2eat.domain.model.SessionParticipant
 import com.what2eat.domain.model.SessionStatus
 import com.what2eat.domain.repository.DecisionSessionRepository
 import com.what2eat.domain.repository.FoodCategoryRepository
@@ -28,7 +33,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.time.LocalDate
@@ -135,121 +140,53 @@ class HistoryViewModel @Inject constructor(
     }
 
     private fun observeHistory() {
+        // v1.5.0 取数重构（v0.9.1 批量化之上的第二层）：
+        // v1.3.0 起筛选流与会话/人物流合并 combine，每点一次筛选 chip 都重跑
+        // 5 次全量查询（participants/options/categories/collections/tags）。
+        // 现拆两层——数据层各自 map + distinctUntilChanged（仅数据变化才查库/
+        // 重建查找表），末层 combine(dataFlow, filterFlow) 纯内存计算，
+        // 筛选切换零数据库查询。
+        // participants 无独立观察流：参与者随会话写入、会话表必同步变化，
+        // 故挂在 sessions 流上刷新。
+        val sessionsFlow = sessionRepository.observeAllSessions()
+            .map { sessions ->
+                sessions to sessionRepository.getAllParticipants().groupBy { it.sessionId }
+            }
+            .distinctUntilChanged()
+        val profilesFlow = personProfileRepository.observeEnabled().distinctUntilChanged()
+        val optionsFlow = savedOptionRepository.observeAll()
+            .map { list -> list.associateBy { it.id } }
+            .distinctUntilChanged()
+        val categoriesFlow = foodCategoryRepository.observeAll()
+            .map { list -> list.associateBy { it.id } }
+            .distinctUntilChanged()
+        val collectionsFlow = savedOptionRepository.observeAllCollections()
+            .map { list ->
+                list.groupBy { it.savedOptionId }
+                    .mapValues { (_, l) -> l.map { it.collectionType }.toSet() }
+            }
+            .distinctUntilChanged()
+        val tagsFlow = savedOptionRepository.observeAllTags().distinctUntilChanged()
+
+        val dataFlow = combine(
+            combine(sessionsFlow, profilesFlow) { a, b -> a to b },
+            combine(optionsFlow, categoriesFlow) { a, b -> a to b },
+            combine(collectionsFlow, tagsFlow) { a, b -> a to b }
+        ) { (sessionsP, profiles), (options, categories), (collections, tags) ->
+            HistoryData(
+                sessions = sessionsP.first,
+                participantsBySession = sessionsP.second,
+                profiles = profiles,
+                optionById = options,
+                categoryById = categories,
+                collectionsByOption = collections,
+                tagsByOption = tags
+            )
+        }
+
         viewModelScope.launch {
-            combine(
-                sessionRepository.observeAllSessions(),
-                personProfileRepository.observeEnabled(),
-                filterFlow
-            ) { sessions, profiles, filter ->
-                val profileByName = profiles.associateBy { it.id }
-                val personNames = profiles.map { it.name }
-                val completed = sessions
-                    .filter {
-                        it.status == SessionStatus.COMPLETED &&
-                            (it.selectedCategoryId != null || it.selectedOptionId != null)
-                    }
-                    .sortedByDescending { it.completedAt ?: it.createdAt }
-
-                if (completed.isEmpty()) return@combine HistoryUiState(
-                    isLoading = false,
-                    isEmpty = true,
-                    filter = filter,
-                    personNames = personNames
-                )
-
-                // v0.9.1：批量化取数——三张查找表一次取齐，
-                // 替代循环内逐条查询（2N+1 次 → 3 次固定查询）
-                val participantsBySession = sessionRepository.getAllParticipants()
-                    .groupBy { it.sessionId }
-                val optionById = savedOptionRepository.observeAll().first()
-                    .associateBy { it.id }
-                val categoryById = foodCategoryRepository.observeAll().first()
-                    .associateBy { it.id }
-
-                // v1.4.0：列表/标签两张查找表一次取齐（池决策筛选维度；惯例同 v0.9.1）
-                val collectionsByOption = savedOptionRepository.observeAllCollections().first()
-                    .groupBy { it.savedOptionId }
-                    .mapValues { (_, list) -> list.map { it.collectionType }.toSet() }
-                val tagsByOption = savedOptionRepository.observeAllTags().first()
-
-                val items = completed.map { session ->
-                    val participants = participantsBySession[session.id].orEmpty()
-                        .sortedBy { it.selectionOrder }
-                        .map { profileByName[it.personId]?.name ?: it.personId }
-                    // 池决策显示店名；分类决策显示分类名
-                    val option = session.selectedOptionId?.let { optionById[it] }
-                    val resultName = option?.name
-                        ?: session.selectedCategoryId?.let { categoryById[it] }?.name
-                        ?: session.selectedCategoryId
-                        ?: if (session.selectedOptionId != null) "已删除的选项" else "未知分类"
-                    HistoryItem(
-                        sessionId = session.id,
-                        categoryName = resultName,
-                        completedAt = session.completedAt ?: session.createdAt,
-                        completedAtText = formatTime(session.completedAt ?: session.createdAt),
-                        decisionModeText = modeText(session.decisionMode),
-                        rerollCount = session.rerollCount,
-                        participants = participants,
-                        // v0.9.0：池决策记录携带区域（「再次搜索」用）
-                        areaText = option?.areaText,
-                        // v1.3.0：模式筛选维度
-                        isPoolDecision = session.decisionMode == DecisionMode.POOL_FIRST,
-                        // v1.4.0：列表/标签筛选维度（分类决策为空集）
-                        collections = option?.let { collectionsByOption[it.id] } ?: emptySet(),
-                        tags = option?.let { tagsByOption[it.id] }?.toSet() ?: emptySet()
-                    )
-                }
-
-                val nowMillis = System.currentTimeMillis()
-                // v0.8.1：统计（全量口径，不受筛选影响）+ v1.3.0 月度报告（同数据源）
-                val statEntries = items.map {
-                    HistoryStatEntry(
-                        name = it.categoryName,
-                        completedAt = it.completedAt,
-                        rerollCount = it.rerollCount
-                    )
-                }
-                val stats = HistoryStatsCalculator.compute(
-                    entries = statEntries,
-                    nowMillis = nowMillis
-                )
-                val monthlyReport = MonthlyReportCalculator.compute(statEntries, nowMillis)
-
-                // v1.3.0：筛选只作用于时间线（统计卡/月报保持全量口径，避免互扰）
-                val filteredItems = if (filter.isDefault) {
-                    items
-                } else {
-                    items.filter {
-                        HistoryFilter.matches(
-                            state = filter,
-                            completedAt = it.completedAt,
-                            participantNames = it.participants,
-                            isPoolDecision = it.isPoolDecision,
-                            nowMillis = nowMillis,
-                            collections = it.collections,
-                            tags = it.tags
-                        )
-                    }
-                }
-                val groups = HistoryDateGrouper
-                    .groupByDay(filteredItems, { it.completedAt })
-                    .map { group ->
-                        HistoryGroupView(label = dayLabel(group.epochDay), items = group.items)
-                    }
-
-                HistoryUiState(
-                    isLoading = false,
-                    groups = groups,
-                    stats = stats,
-                    isEmpty = items.isEmpty(),
-                    filter = filter,
-                    personNames = personNames,
-                    monthlyReport = monthlyReport,
-                    // v1.4.0：只展示历史中真实出现的维度值（减少空选项噪声）
-                    collectionFilters = items.flatMap { it.collections }.distinct()
-                        .sortedBy { it.ordinal },
-                    tagFilters = items.flatMap { it.tags }.distinct().sorted()
-                )
+            combine(dataFlow, filterFlow) { data, filter ->
+                buildState(data, filter)
             }
                 .distinctUntilChanged()
                 .collect { state ->
@@ -258,6 +195,115 @@ class HistoryViewModel @Inject constructor(
                 }
         }
     }
+
+    /** v1.5.0：纯内存组装（数据快照 + 筛选 → UI 状态；零挂起查询） */
+    private fun buildState(data: HistoryData, filter: HistoryFilterState): HistoryUiState {
+        val profileByName = data.profiles.associateBy { it.id }
+        val personNames = data.profiles.map { it.name }
+        val completed = data.sessions
+                    .filter {
+                        it.status == SessionStatus.COMPLETED &&
+                            (it.selectedCategoryId != null || it.selectedOptionId != null)
+                    }
+                    .sortedByDescending { it.completedAt ?: it.createdAt }
+
+        if (completed.isEmpty()) return HistoryUiState(
+            isLoading = false,
+            isEmpty = true,
+            filter = filter,
+            personNames = personNames
+        )
+
+        val items = completed.map { session ->
+            val participants = data.participantsBySession[session.id].orEmpty()
+                .sortedBy { it.selectionOrder }
+                .map { profileByName[it.personId]?.name ?: it.personId }
+            // 池决策显示店名；分类决策显示分类名
+            val option = session.selectedOptionId?.let { data.optionById[it] }
+            val resultName = option?.name
+                ?: session.selectedCategoryId?.let { data.categoryById[it] }?.name
+                ?: session.selectedCategoryId
+                ?: if (session.selectedOptionId != null) "已删除的选项" else "未知分类"
+            HistoryItem(
+                sessionId = session.id,
+                categoryName = resultName,
+                completedAt = session.completedAt ?: session.createdAt,
+                completedAtText = formatTime(session.completedAt ?: session.createdAt),
+                decisionModeText = modeText(session.decisionMode),
+                rerollCount = session.rerollCount,
+                participants = participants,
+                // v0.9.0：池决策记录携带区域（「再次搜索」用）
+                areaText = option?.areaText,
+                // v1.3.0：模式筛选维度
+                isPoolDecision = session.decisionMode == DecisionMode.POOL_FIRST,
+                // v1.4.0：列表/标签筛选维度（分类决策为空集）
+                collections = option?.let { data.collectionsByOption[it.id] } ?: emptySet(),
+                tags = option?.let { data.tagsByOption[it.id] }?.toSet() ?: emptySet()
+            )
+        }
+
+        val nowMillis = System.currentTimeMillis()
+        // v0.8.1：统计（全量口径，不受筛选影响）+ v1.3.0 月度报告（同数据源）
+        val statEntries = items.map {
+            HistoryStatEntry(
+                name = it.categoryName,
+                completedAt = it.completedAt,
+                rerollCount = it.rerollCount
+            )
+        }
+        val stats = HistoryStatsCalculator.compute(
+            entries = statEntries,
+            nowMillis = nowMillis
+        )
+        val monthlyReport = MonthlyReportCalculator.compute(statEntries, nowMillis)
+
+        // v1.3.0：筛选只作用于时间线（统计卡/月报保持全量口径，避免互扰）
+        val filteredItems = if (filter.isDefault) {
+            items
+        } else {
+            items.filter {
+                HistoryFilter.matches(
+                    state = filter,
+                    completedAt = it.completedAt,
+                    participantNames = it.participants,
+                    isPoolDecision = it.isPoolDecision,
+                    nowMillis = nowMillis,
+                    collections = it.collections,
+                    tags = it.tags
+                )
+            }
+        }
+        val groups = HistoryDateGrouper
+            .groupByDay(filteredItems, { it.completedAt })
+            .map { group ->
+                HistoryGroupView(label = dayLabel(group.epochDay), items = group.items)
+            }
+
+        return HistoryUiState(
+            isLoading = false,
+            groups = groups,
+            stats = stats,
+            isEmpty = items.isEmpty(),
+            filter = filter,
+            personNames = personNames,
+            monthlyReport = monthlyReport,
+            // v1.4.0：只展示历史中真实出现的维度值（减少空选项噪声）
+            collectionFilters = items.flatMap { it.collections }.distinct()
+                .sortedBy { it.ordinal },
+            tagFilters = items.flatMap { it.tags }.distinct().sorted()
+        )
+    }
+
+    /** v1.5.0：历史页数据快照（取数与筛选分离——数据变化才查库，筛选切换零查询） */
+    private data class HistoryData(
+        val sessions: List<DecisionSession>,
+        val participantsBySession: Map<String, List<SessionParticipant>>,
+        val profiles: List<PersonProfile>,
+        val optionById: Map<String, SavedOption>,
+        val categoryById: Map<String, FoodCategory>,
+        val collectionsByOption: Map<String, Set<CollectionType>>,
+        val tagsByOption: Map<String, List<String>>
+    )
 
     private fun modeText(mode: DecisionMode): String {
         return when (mode) {
