@@ -35,6 +35,8 @@ Instead of becoming another restaurant review platform, What2Eat helps you **dec
 > 「那你想吃什么？」
 > 「不知道。」
 
+**这段对话不是编的——它真实发生在作者和女朋友之间，What2Eat 就是她给的灵感。**
+
 问题通常不是「附近没有餐厅」，而是：双方没有明确目标、一直互相否定选项、收藏了很多店但真正决定时找不到、总在同几家店之间循环。
 
 What2Eat 把这个过程从 `反复讨论` 变成：
