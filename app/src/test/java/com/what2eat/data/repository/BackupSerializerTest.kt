@@ -13,6 +13,7 @@ import com.what2eat.domain.repository.SavedOptionCollectionBackup
 import com.what2eat.domain.repository.SavedOptionTagBackup
 import com.what2eat.domain.repository.SessionCategorySelectionBackup
 import com.what2eat.domain.repository.SessionParticipantBackup
+import com.what2eat.domain.repository.TagBackup
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -24,10 +25,11 @@ import org.junit.Test
  * 3. 畸形 JSON / 缺 formatVersion → 拒绝
  * 4. 缺可选字段 → 默认值容错填充
  * 5. summary 计数（标签去重）
+ * v1.6.0：tags（标签颜色）往返 + 旧格式（无 tags 字段）容错
  */
 class BackupSerializerTest {
 
-    /** 覆盖全部 11 表的完整 payload（可空字段同时含 null 与非 null 两种形态） */
+    /** 覆盖全部 12 表的完整 payload（可空字段同时含 null 与非 null 两种形态） */
     private fun fullPayload() = BackupPayload(
         formatVersion = 1,
         exportedAt = 1725417600000L,
@@ -116,6 +118,10 @@ class BackupSerializerTest {
                 personId = "person_primary", savedOptionId = "opt-1",
                 preferenceLevel = 2, hardExcluded = false, updatedAt = 23L
             )
+        ),
+        tags = listOf(
+            TagBackup(name = "茶餐厅", colorArgb = 0xFFA84B17.toInt(), createdAt = 24L),
+            TagBackup(name = "火锅", colorArgb = 0xFF586720.toInt(), createdAt = 25L)
         )
     )
 
@@ -194,5 +200,28 @@ class BackupSerializerTest {
         assertEquals(2, decoded.summary.tagCount)
         assertEquals(2, decoded.summary.sessionCount)
         assertEquals(1, decoded.summary.recommendationCount)
+    }
+
+    // ── 6. v1.6.0：tags（标签颜色）──
+
+    @Test
+    fun `tags round trip preserves colors`() {
+        val decoded = BackupSerializer.decode(BackupSerializer.encode(fullPayload()))
+
+        assertEquals(2, decoded.payload.tags.size)
+        assertEquals("茶餐厅", decoded.payload.tags[0].name)
+        assertEquals(0xFFA84B17.toInt(), decoded.payload.tags[0].colorArgb)
+        assertEquals(24L, decoded.payload.tags[0].createdAt)
+        assertEquals("火锅", decoded.payload.tags[1].name)
+        assertEquals(0xFF586720.toInt(), decoded.payload.tags[1].colorArgb)
+    }
+
+    @Test
+    fun `legacy backup without tags field decodes to empty list`() {
+        // v1.5.0 及更早的备份文件没有 tags 字段 → 容错为 emptyList（导入后颜色回落默认）
+        val json = """{"formatVersion": 1, "personProfiles": [], "savedOptionTags": []}"""
+        val decoded = BackupSerializer.decode(json)
+
+        assertTrue(decoded.payload.tags.isEmpty())
     }
 }

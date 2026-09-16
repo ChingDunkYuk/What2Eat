@@ -8,6 +8,7 @@ import com.what2eat.core.database.MIGRATION_3_4
 import com.what2eat.core.database.MIGRATION_4_5
 import com.what2eat.core.database.MIGRATION_5_6
 import com.what2eat.core.database.MIGRATION_6_7
+import com.what2eat.core.database.MIGRATION_7_8
 import com.what2eat.core.database.What2EatDatabase
 import com.what2eat.core.database.dao.DecisionRecommendationDao
 import com.what2eat.core.database.dao.DecisionSessionDao
@@ -20,6 +21,7 @@ import com.what2eat.core.database.dao.SavedOptionDao
 import com.what2eat.core.database.dao.SavedOptionTagDao
 import com.what2eat.core.database.dao.SessionCategorySelectionDao
 import com.what2eat.core.database.dao.SessionParticipantDao
+import com.what2eat.core.database.dao.TagDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -41,7 +43,7 @@ object DatabaseModule {
             What2EatDatabase::class.java,
             What2EatDatabase.DATABASE_NAME
         )
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
             .build()
     }
 
@@ -88,4 +90,8 @@ object DatabaseModule {
     @Provides
     fun providePersonOptionPreferenceDao(database: What2EatDatabase): PersonOptionPreferenceDao =
         database.personOptionPreferenceDao()
+
+    @Provides
+    fun provideTagDao(database: What2EatDatabase): TagDao =
+        database.tagDao()
 }

@@ -1,16 +1,23 @@
 package com.what2eat.feature.foodpool
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -32,11 +39,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.what2eat.core.designsystem.icon.What2EatIcons
+import com.what2eat.domain.model.TagPalette
 import com.what2eat.domain.model.TagUsage
 import kotlinx.coroutines.delay
 
@@ -46,7 +56,7 @@ import kotlinx.coroutines.delay
  * 列出全部标签（按使用数降序），行内菜单支持重命名与删除；
  * 重命名到已有标签自动合并（同选项重复关联去重）。
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun TagManageSheet(
     onDismiss: () -> Unit,
@@ -131,7 +141,11 @@ fun TagManageSheet(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         items(uiState.tags, key = { it.name }) { tag ->
-                            TagRow(tag = tag, viewModel = viewModel)
+                            TagRow(
+                                tag = tag,
+                                colorArgb = uiState.colorByTag[tag.name],
+                                viewModel = viewModel
+                            )
                         }
                     }
                 }
@@ -197,12 +211,89 @@ fun TagManageSheet(
             }
         )
     }
+
+    // ── v1.6.0：色板对话框（8 预设色 + 默认） ──
+    val coloring = uiState.coloringTag
+    if (coloring != null) {
+        val currentColor = uiState.colorByTag[coloring.name]
+        AlertDialog(
+            onDismissRequest = viewModel::dismissColoring,
+            title = { Text("「${coloring.name}」的颜色") },
+            text = {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // 默认色（中性灰点 + 斜杠语义：回落未设置）
+                    ColorSwatch(
+                        color = Color(TagPalette.DEFAULT),
+                        selected = currentColor == null,
+                        label = "默认",
+                        onClick = { viewModel.pickColor(null) }
+                    )
+                    TagPalette.presets.forEach { preset ->
+                        ColorSwatch(
+                            color = Color(preset),
+                            selected = currentColor == preset,
+                            label = null,
+                            onClick = { viewModel.pickColor(preset) }
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissColoring) { Text("关闭") }
+            }
+        )
+    }
 }
 
-/** 单个标签行：名称 + 使用数 + 行内操作菜单 */
+/** v1.6.0：色板圆点（选中带勾；默认色项显示「默认」小字） */
+@Composable
+private fun ColorSwatch(
+    color: Color,
+    selected: Boolean,
+    label: String?,
+    onClick: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(color)
+                .then(
+                    if (selected) {
+                        Modifier.border(2.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                    } else Modifier
+                )
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            if (selected) {
+                Icon(
+                    imageVector = What2EatIcons.Check,
+                    contentDescription = "当前颜色",
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+        if (label != null) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/** 单个标签行：色点 + 名称 + 使用数 + 行内操作菜单（v1.6.0 色点/颜色入口） */
 @Composable
 private fun TagRow(
     tag: TagUsage,
+    colorArgb: Int?,
     viewModel: TagManageViewModel
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -213,7 +304,14 @@ private fun TagRow(
             .fillMaxWidth()
             .padding(vertical = 2.dp)
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        // v1.6.0：色点（有颜色时展示标签色，否则中性灰）
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(colorArgb?.let { Color(it) } ?: MaterialTheme.colorScheme.outlineVariant)
+        )
+        Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
             Text(
                 text = tag.name,
                 style = MaterialTheme.typography.titleMedium,
@@ -236,6 +334,21 @@ private fun TagRow(
                 expanded = menuExpanded,
                 onDismissRequest = { menuExpanded = false }
             ) {
+                DropdownMenuItem(
+                    text = { Text("颜色") },
+                    leadingIcon = {
+                        Box(
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clip(CircleShape)
+                                .background(colorArgb?.let { Color(it) } ?: MaterialTheme.colorScheme.outlineVariant)
+                        )
+                    },
+                    onClick = {
+                        menuExpanded = false
+                        viewModel.startColoring(tag)
+                    }
+                )
                 DropdownMenuItem(
                     text = { Text("重命名") },
                     leadingIcon = { Icon(What2EatIcons.Edit, contentDescription = null) },

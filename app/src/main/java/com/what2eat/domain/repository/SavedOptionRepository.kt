@@ -83,6 +83,17 @@ interface SavedOptionRepository {
     /** 删除标签（移除其全部关联） */
     suspend fun deleteTag(tagId: String)
 
+    // ── 标签颜色（v1.6.0） ──
+
+    /** 观察标签颜色（标签名 → colorArgb；只含显式设置过颜色的行，无行 = 默认色） */
+    fun observeTagColors(): Flow<Map<String, Int>>
+
+    /**
+     * 设置标签颜色。colorArgb 为 null 或 [com.what2eat.domain.model.TagPalette.DEFAULT]
+     * 时删除元数据行（回落默认色）；否则 upsert。
+     */
+    suspend fun setTagColor(name: String, colorArgb: Int?)
+
     // ── 人物具体偏好 ──
 
     /** 观察选项的被各人物偏好 */

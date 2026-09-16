@@ -27,6 +27,8 @@ data class FoodOptionDetailState(
     val option: SavedOption? = null,
     val collections: List<String> = emptyList(),
     val tags: List<String> = emptyList(),
+    /** v1.6.0：标签颜色（无行 = 默认色，map 中不出现） */
+    val tagColors: Map<String, Int> = emptyMap(),
     val preferences: List<OptionPreferenceUi> = emptyList(),
     val message: String? = null,
     val deleted: Boolean = false,
@@ -54,8 +56,11 @@ class FoodOptionDetailViewModel @Inject constructor(
                 optionRepository.observeCollections(optionId),
                 optionRepository.observeTags(optionId),
                 optionRepository.observePreferences(optionId),
-                personRepository.observeEnabled()
-            ) { option, cols, tags, prefs, profiles ->
+                combine(
+                    personRepository.observeEnabled(),
+                    optionRepository.observeTagColors()
+                ) { profiles, colors -> profiles to colors }
+            ) { option, cols, tags, prefs, (profiles, colors) ->
                 val profileByName = profiles.associateBy { it.id }
                 val prefByPerson = prefs.associateBy { it.personId }
                 // 为每个已启用人物都生成一行偏好（未设置时回退默认值），保证能分别点击设置
@@ -72,6 +77,7 @@ class FoodOptionDetailViewModel @Inject constructor(
                     option = option,
                     collections = cols.map { it.collectionType.label },
                     tags = tags,
+                    tagColors = colors,
                     preferences = prefUi
                 )
             }.collect { state ->

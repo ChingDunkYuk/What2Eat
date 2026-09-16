@@ -7,10 +7,12 @@ import com.what2eat.core.database.dao.PersonOptionPreferenceDao
 import com.what2eat.core.database.dao.SavedOptionCollectionDao
 import com.what2eat.core.database.dao.SavedOptionDao
 import com.what2eat.core.database.dao.SavedOptionTagDao
+import com.what2eat.core.database.dao.TagDao
 import com.what2eat.core.database.entity.PersonOptionPreferenceEntity
 import com.what2eat.core.database.entity.SavedOptionCollectionEntity
 import com.what2eat.core.database.entity.SavedOptionEntity
 import com.what2eat.core.database.entity.SavedOptionTagEntity
+import com.what2eat.core.database.entity.TagEntity
 import com.what2eat.domain.model.CollectionType
 import com.what2eat.domain.model.ImportStatus
 import com.what2eat.domain.model.OptionPreferenceLevel
@@ -18,6 +20,7 @@ import com.what2eat.domain.model.PersonOptionPreference
 import com.what2eat.domain.model.SavedOption
 import com.what2eat.domain.model.SavedOptionCollection
 import com.what2eat.domain.model.SavedOptionType
+import com.what2eat.domain.model.TagPalette
 import com.what2eat.domain.model.TagUsage
 import com.what2eat.domain.model.SourcePlatform
 import com.what2eat.domain.repository.SavedOptionRepository
@@ -32,6 +35,7 @@ class SavedOptionRepositoryImpl @Inject constructor(
     private val optionDao: SavedOptionDao,
     private val collectionDao: SavedOptionCollectionDao,
     private val tagDao: SavedOptionTagDao,
+    private val tagMetadataDao: TagDao,
     private val preferenceDao: PersonOptionPreferenceDao,
     private val decisionSessionDao: DecisionSessionDao
 ) : SavedOptionRepository {
@@ -145,11 +149,38 @@ class SavedOptionRepositoryImpl @Inject constructor(
             // 目标签已存在时，此步之后 UPDATE 即完成合并（去重）
             tagDao.deleteMergeConflicts(from, target)
             tagDao.renameTagRefs(from, target)
+            // v1.6.0 颜色归属：合并（to 已有元数据行）→ 删 from 行，to 色胜出；
+            // 纯重命名（to 无行）→ from 行改指 to，颜色跟随
+            if (tagMetadataDao.getByName(target) != null) {
+                tagMetadataDao.deleteByName(from)
+            } else {
+                tagMetadataDao.renameIfTargetAbsent(from, target)
+            }
         }
     }
 
     override suspend fun deleteTag(tagId: String) {
-        tagDao.deleteByTag(tagId)
+        database.withTransaction {
+            tagDao.deleteByTag(tagId)
+            // v1.6.0：连带删除颜色元数据行
+            tagMetadataDao.deleteByName(tagId)
+        }
+    }
+
+    // ── 标签颜色（v1.6.0） ──
+
+    override fun observeTagColors(): Flow<Map<String, Int>> =
+        tagMetadataDao.observeAll().map { list -> list.associate { it.name to it.colorArgb } }
+
+    override suspend fun setTagColor(name: String, colorArgb: Int?) {
+        // 懒元数据策略：null / 默认色 → 删行回落默认；非默认 → upsert
+        if (colorArgb == null || colorArgb == TagPalette.DEFAULT) {
+            tagMetadataDao.deleteByName(name)
+        } else {
+            tagMetadataDao.upsert(
+                TagEntity(name = name, colorArgb = colorArgb, createdAt = System.currentTimeMillis())
+            )
+        }
     }
 
     override fun observePreferences(optionId: String): Flow<List<PersonOptionPreference>> =

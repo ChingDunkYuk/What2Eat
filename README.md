@@ -7,7 +7,7 @@
 > An Android app that helps couples decide what to eat together. Local-first, open source, no accounts.
 
 [![Release](https://img.shields.io/github/v/release/ChingDunkYuk/What2Eat)](https://github.com/ChingDunkYuk/What2Eat/releases)
-[![Tests](https://img.shields.io/badge/JVM%20tests-271%20green)](CHANGELOG.md)
+[![Tests](https://img.shields.io/badge/JVM%20tests-282%20green)](CHANGELOG.md)
 [![minSdk](https://img.shields.io/badge/minSdk-26-blue)](app/build.gradle.kts)
 
 ---
@@ -54,7 +54,7 @@ What2Eat 把这个过程从 `反复讨论` 变成：
 
 ### 吃饭池（你的长期数据资产）
 - 六大列表：常吃 / 吃过 / 待尝试 / 外卖 / 在家做 / 踩雷
-- 标签（含联想 chips 与管理面板：重命名/合并/删除）、区域、预计用时、备注、原始链接
+- 标签（含颜色、联想 chips 与管理面板：选色/重命名/合并/删除）、区域、预计用时、备注、原始链接
 - **待整理收件箱**：分享进来的店先收着，支持**长按多选批量确认入库/批量删除**
 - 具体人物独立偏好、长期不吃（硬排除）、停用/删除（历史引用保护）
 
@@ -74,7 +74,7 @@ What2Eat 把这个过程从 `反复讨论` 变成：
 - 再次搜索：任意历史记录一键回平台找店
 
 ### 工程基建
-- 数据备份/恢复（SAF 导出导入，全 11 表 JSON，事务原子替换）
+- 数据备份/恢复（SAF 导出导入，全 12 表 JSON，事务原子替换）
 - 弹跳微交互体系（按压回弹/交错入场/换一个重弹）
 - **崩溃捕获**：闪退后重开自动弹堆栈一键复制（无 adb 排障）
 - 抓取诊断面板：分享确认页内实时日志一键复制
@@ -95,7 +95,7 @@ What2Eat 把这个过程从 `反复讨论` 变成：
 # Debug（无需任何配置）
 ./gradlew assembleDebug
 
-# 单元测试（271 项 JVM 测试）
+# 单元测试（282 项 JVM 测试）
 ./gradlew testDebugUnitTest
 
 # Release（需要自备签名密钥）
@@ -108,7 +108,7 @@ Release 构建需自行准备签名：在 `app/keystore.properties` 填入你自
 ## 技术栈 / Tech Stack
 
 - **Kotlin** + **Jetpack Compose**（Material 3）+ **Navigation Compose**
-- **Room**（11 表，DB v7）+ **DataStore** + **Hilt**（DI）
+- **Room**（12 表，DB v8）+ **DataStore** + **Hilt**（DI）
 - **StateFlow / Coroutines**（viewModelScope 驱动）
 - **org.json**（备份序列化；刻意避开反射型序列化库以保 R8 兼容）
 - **WebView + HttpURLConnection**（分享店名抓取链：主文档代理/双层拦截/JS 数据劫持）
@@ -129,7 +129,9 @@ Release 构建需自行准备签名：在 `app/keystore.properties` 填入你自
 | v1.1.x | 美团店名抓取强化（JS 数据劫持 / 代理修复 / 护栏） | ✅ |
 | v1.2.x | **验证墙人工通过**（滑块信任期）+ 登录态修正 + GitHub 上线 | ✅ |
 | v1.3.x | 批量整理 / 标签联想 / 历史三维筛选 / 月报 / 崩溃捕获 / 闪退修复 | ✅ |
-| v1.4.0 | 历史筛选 +列表/标签维度（当前最新） | ✅ |
+| v1.4.0 | 历史筛选 +列表/标签维度 | ✅ |
+| v1.5.0 | 历史页取数分层（筛选切换零查询）+ 告警清零 | ✅ |
+| v1.6.0 | **标签颜色**（DB v8，预设色板 + 四处着色 + 备份 12 表）（当前最新） | ✅ |
 
 ---
 
@@ -148,7 +150,7 @@ Release 构建需自行准备签名：在 `app/keystore.properties` 填入你自
 ```text
 com.what2eat
 ├── core
-│   ├── database          # Room 11 表 / DAO / 迁移
+│   ├── database          # Room 12 表 / DAO / 迁移
 │   ├── datastore         # 使用模式等偏好
 │   ├── designsystem      # 主题 / 图标 / 动效体系
 │   └── navigation        # NavHost

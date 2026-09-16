@@ -167,12 +167,14 @@ class HistoryViewModel @Inject constructor(
             }
             .distinctUntilChanged()
         val tagsFlow = savedOptionRepository.observeAllTags().distinctUntilChanged()
+        // v1.6.0：标签颜色（同挂数据层，筛选切换零查询）
+        val tagColorsFlow = savedOptionRepository.observeTagColors().distinctUntilChanged()
 
         val dataFlow = combine(
             combine(sessionsFlow, profilesFlow) { a, b -> a to b },
             combine(optionsFlow, categoriesFlow) { a, b -> a to b },
-            combine(collectionsFlow, tagsFlow) { a, b -> a to b }
-        ) { (sessionsP, profiles), (options, categories), (collections, tags) ->
+            combine(collectionsFlow, tagsFlow, tagColorsFlow) { a, b, c -> Triple(a, b, c) }
+        ) { (sessionsP, profiles), (options, categories), (collections, tags, tagColors) ->
             HistoryData(
                 sessions = sessionsP.first,
                 participantsBySession = sessionsP.second,
@@ -180,7 +182,8 @@ class HistoryViewModel @Inject constructor(
                 optionById = options,
                 categoryById = categories,
                 collectionsByOption = collections,
-                tagsByOption = tags
+                tagsByOption = tags,
+                tagColors = tagColors
             )
         }
 
@@ -290,7 +293,8 @@ class HistoryViewModel @Inject constructor(
             // v1.4.0：只展示历史中真实出现的维度值（减少空选项噪声）
             collectionFilters = items.flatMap { it.collections }.distinct()
                 .sortedBy { it.ordinal },
-            tagFilters = items.flatMap { it.tags }.distinct().sorted()
+            tagFilters = items.flatMap { it.tags }.distinct().sorted(),
+            tagColors = data.tagColors
         )
     }
 
@@ -302,7 +306,9 @@ class HistoryViewModel @Inject constructor(
         val optionById: Map<String, SavedOption>,
         val categoryById: Map<String, FoodCategory>,
         val collectionsByOption: Map<String, Set<CollectionType>>,
-        val tagsByOption: Map<String, List<String>>
+        val tagsByOption: Map<String, List<String>>,
+        /** v1.6.0：标签颜色（无行 = 默认色，map 中不出现） */
+        val tagColors: Map<String, Int> = emptyMap()
     )
 
     private fun modeText(mode: DecisionMode): String {

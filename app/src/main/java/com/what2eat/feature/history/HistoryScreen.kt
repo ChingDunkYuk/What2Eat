@@ -1,6 +1,7 @@
 package com.what2eat.feature.history
 
 import com.what2eat.core.designsystem.icon.What2EatIcons
+import com.what2eat.core.designsystem.component.TagChip
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -155,6 +156,7 @@ fun HistoryScreen(
                                 personNames = uiState.personNames,
                                 collectionFilters = uiState.collectionFilters,
                                 tagFilters = uiState.tagFilters,
+                                tagColors = uiState.tagColors,
                                 onTime = viewModel::setTimeFilter,
                                 onPerson = viewModel::setPersonFilter,
                                 onMode = viewModel::setModeFilter,
@@ -243,6 +245,7 @@ private fun HistoryFilterRow(
     personNames: List<String>,
     collectionFilters: List<CollectionType>,
     tagFilters: List<String>,
+    tagColors: Map<String, Int>,
     onTime: (HistoryTimeFilter) -> Unit,
     onPerson: (String?) -> Unit,
     onMode: (HistoryModeFilter) -> Unit,
@@ -301,7 +304,7 @@ private fun HistoryFilterRow(
                 }
             }
         }
-        // v1.4.0：标签维度（同上）
+        // v1.4.0：标签维度（同上）；v1.6.0：TagChip 着色
         if (tagFilters.isNotEmpty()) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
@@ -310,10 +313,11 @@ private fun HistoryFilterRow(
                     label = { Text("全部标签") }
                 )
                 tagFilters.forEach { name ->
-                    FilterChip(
+                    TagChip(
+                        name = name,
+                        colorArgb = tagColors[name],
                         selected = filter.tagName == name,
-                        onClick = { onTag(name) },
-                        label = { Text(name) }
+                        onClick = { onTag(name) }
                     )
                 }
             }

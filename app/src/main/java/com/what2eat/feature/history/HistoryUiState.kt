@@ -31,7 +31,9 @@ data class HistoryUiState(
     /** v1.4.0：列表筛选项（历史中出现过的所属列表，按枚举序） */
     val collectionFilters: List<CollectionType> = emptyList(),
     /** v1.4.0：标签筛选项（历史中出现过的标签名，字典序） */
-    val tagFilters: List<String> = emptyList()
+    val tagFilters: List<String> = emptyList(),
+    /** v1.6.0：标签颜色（无行 = 默认色，map 中不出现） */
+    val tagColors: Map<String, Int> = emptyMap()
 )
 
 /**

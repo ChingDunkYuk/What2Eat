@@ -34,7 +34,9 @@ data class FoodOptionFormState(
     val saved: Boolean = false,
     val hasChanges: Boolean = false,
     /** v1.3.0：标签联想建议（按使用数降序，编辑时排除已在 tags 中的） */
-    val tagSuggestions: List<String> = emptyList()
+    val tagSuggestions: List<String> = emptyList(),
+    /** v1.6.0：标签颜色（与 suggestions 同时机一次取；无行 = 默认色，map 中不出现） */
+    val tagColors: Map<String, Int> = emptyMap()
 ) {
     /** 名称已 trim 且非空，可保存 */
     val canSave: Boolean get() = name.isNotBlank()
@@ -66,7 +68,11 @@ class FoodOptionEditViewModel @Inject constructor(
                     .filter { it.isNotBlank() }
                     .take(12)
             }.getOrDefault(emptyList())
-            _uiState.value = _uiState.value.copy(tagSuggestions = suggestions)
+            // v1.6.0：颜色与建议同时机一次取（沿用一次性惯例）
+            val colors = runCatching {
+                repository.observeTagColors().first()
+            }.getOrDefault(emptyMap())
+            _uiState.value = _uiState.value.copy(tagSuggestions = suggestions, tagColors = colors)
         }
         if (optionId == null) return
         viewModelScope.launch {

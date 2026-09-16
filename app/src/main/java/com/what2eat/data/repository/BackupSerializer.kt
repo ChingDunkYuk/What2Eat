@@ -14,6 +14,7 @@ import com.what2eat.domain.repository.SavedOptionCollectionBackup
 import com.what2eat.domain.repository.SavedOptionTagBackup
 import com.what2eat.domain.repository.SessionCategorySelectionBackup
 import com.what2eat.domain.repository.SessionParticipantBackup
+import com.what2eat.domain.repository.TagBackup
 import com.what2eat.domain.repository.ValidatedBackup
 import org.json.JSONArray
 import org.json.JSONObject
@@ -30,7 +31,7 @@ import org.json.JSONObject
  */
 object BackupSerializer {
 
-    /** 当前备份格式版本（绑定 DB schema v7） */
+    /** 当前备份格式版本（绑定 DB schema v8；v1.6.0 新增可选 tags 字段，版本不递增） */
     const val CURRENT_FORMAT_VERSION = 1
 
     fun encode(payload: BackupPayload): String {
@@ -50,6 +51,7 @@ object BackupSerializer {
         root.put("savedOptionCollections", JSONArray(payload.savedOptionCollections.map { it.toJson() }))
         root.put("savedOptionTags", JSONArray(payload.savedOptionTags.map { it.toJson() }))
         root.put("personOptionPreferences", JSONArray(payload.personOptionPreferences.map { it.toJson() }))
+        root.put("tags", JSONArray(payload.tags.map { it.toJson() }))
         return root.toString(2)
     }
 
@@ -87,7 +89,9 @@ object BackupSerializer {
             savedOptions = root.optArray("savedOptions") { it.toSavedOption() },
             savedOptionCollections = root.optArray("savedOptionCollections") { it.toSavedOptionCollection() },
             savedOptionTags = root.optArray("savedOptionTags") { it.toSavedOptionTag() },
-            personOptionPreferences = root.optArray("personOptionPreferences") { it.toPersonOptionPreference() }
+            personOptionPreferences = root.optArray("personOptionPreferences") { it.toPersonOptionPreference() },
+            // v1.6.0：旧文件缺 tags 字段 → emptyList（导入后颜色回落默认，懒策略兼容）
+            tags = root.optArray("tags") { it.toTag() }
         )
         return ValidatedBackup(payload = payload, summary = summarize(payload))
     }
@@ -275,6 +279,16 @@ object BackupSerializer {
 
     private fun JSONObject.toSavedOptionTag() = SavedOptionTagBackup(
         savedOptionId = optString("savedOptionId"), tagId = optString("tagId")
+    )
+
+    // ── Tag（v1.6.0 标签颜色） ──
+
+    private fun TagBackup.toJson() = JSONObject()
+        .put("name", name).put("colorArgb", colorArgb).put("createdAt", createdAt)
+
+    private fun JSONObject.toTag() = TagBackup(
+        name = optString("name"), colorArgb = optInt("colorArgb", 0),
+        createdAt = optLong("createdAt", 0L)
     )
 
     // ── PersonOptionPreference ──

@@ -33,4 +33,10 @@ class MigrationsTest {
         assertEquals(5, MIGRATION_5_6.startVersion)
         assertEquals(6, MIGRATION_5_6.endVersion)
     }
+
+    @Test
+    fun `migration 7 to 8 adds tag metadata table`() {
+        assertEquals(7, MIGRATION_7_8.startVersion)
+        assertEquals(8, MIGRATION_7_8.endVersion)
+    }
 }

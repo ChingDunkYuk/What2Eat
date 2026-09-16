@@ -13,6 +13,7 @@ import com.what2eat.core.database.dao.SavedOptionDao
 import com.what2eat.core.database.dao.SavedOptionTagDao
 import com.what2eat.core.database.dao.SessionCategorySelectionDao
 import com.what2eat.core.database.dao.SessionParticipantDao
+import com.what2eat.core.database.dao.TagDao
 import com.what2eat.core.database.entity.DecisionRecommendationEntity
 import com.what2eat.core.database.entity.DecisionSessionEntity
 import com.what2eat.core.database.entity.FoodCategoryEntity
@@ -24,6 +25,7 @@ import com.what2eat.core.database.entity.SavedOptionEntity
 import com.what2eat.core.database.entity.SavedOptionTagEntity
 import com.what2eat.core.database.entity.SessionCategorySelectionEntity
 import com.what2eat.core.database.entity.SessionParticipantEntity
+import com.what2eat.core.database.entity.TagEntity
 import com.what2eat.core.datastore.AppUsageModeDataStore
 import com.what2eat.domain.repository.BackupManager
 import com.what2eat.domain.repository.BackupPayload
@@ -39,6 +41,7 @@ import com.what2eat.domain.repository.SavedOptionCollectionBackup
 import com.what2eat.domain.repository.SavedOptionTagBackup
 import com.what2eat.domain.repository.SessionCategorySelectionBackup
 import com.what2eat.domain.repository.SessionParticipantBackup
+import com.what2eat.domain.repository.TagBackup
 import com.what2eat.domain.model.AppUsageMode
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
@@ -47,7 +50,7 @@ import javax.inject.Singleton
 /**
  * 备份管理器实现（v0.9.3）。
  *
- * 导出：11 张表全量快照 + usageMode → JSON。
+ * 导出：12 张表全量快照 + usageMode → JSON（v1.6.0 起含 tag 颜色元数据）。
  * 导入：单 Room 事务内「先删子表后删父表，再父表→子表插入」全量替换，
  * 数据库要么整库还原、要么原样不动；成功后恢复 usageMode 与引导完成标志。
  */
@@ -65,6 +68,7 @@ class BackupManagerImpl @Inject constructor(
     private val savedOptionCollectionDao: SavedOptionCollectionDao,
     private val savedOptionTagDao: SavedOptionTagDao,
     private val personOptionPreferenceDao: PersonOptionPreferenceDao,
+    private val tagDao: TagDao,
     private val usageModeDataStore: AppUsageModeDataStore
 ) : BackupManager {
 
@@ -84,7 +88,8 @@ class BackupManagerImpl @Inject constructor(
             savedOptions = savedOptionDao.getAll().map { it.toBackup() },
             savedOptionCollections = savedOptionCollectionDao.getAll().map { it.toBackup() },
             savedOptionTags = savedOptionTagDao.getAll().map { it.toBackup() },
-            personOptionPreferences = personOptionPreferenceDao.getAll().map { it.toBackup() }
+            personOptionPreferences = personOptionPreferenceDao.getAll().map { it.toBackup() },
+            tags = tagDao.getAll().map { it.toBackup() }
         )
         return BackupSerializer.encode(payload)
     }
@@ -95,9 +100,10 @@ class BackupManagerImpl @Inject constructor(
     override suspend fun importAll(backup: ValidatedBackup) {
         val p = backup.payload
         database.withTransaction {
-            // ── 删：子表 → 父表（FK 安全顺序）──
+            // ── 删：子表 → 父表（FK 安全顺序；tag 无 FK 随子表段一并清）──
             personOptionPreferenceDao.deleteAll()
             savedOptionTagDao.deleteAll()
+            tagDao.deleteAll()
             savedOptionCollectionDao.deleteAll()
             decisionRecommendationDao.deleteAll()
             sessionCategorySelectionDao.deleteAll()
@@ -120,6 +126,7 @@ class BackupManagerImpl @Inject constructor(
             savedOptionCollectionDao.insertAll(p.savedOptionCollections.map { it.toEntity() })
             savedOptionTagDao.insertAll(p.savedOptionTags.map { it.toEntity() })
             personOptionPreferenceDao.insertAll(p.personOptionPreferences.map { it.toEntity() })
+            tagDao.insertAll(p.tags.map { it.toEntity() })
         }
 
         // ── DataStore：使用模式 + 引导标志（事务外，失败不影响库数据）──
@@ -186,6 +193,10 @@ class BackupManagerImpl @Inject constructor(
         savedOptionId = savedOptionId, tagId = tagId
     )
 
+    private fun TagEntity.toBackup() = TagBackup(
+        name = name, colorArgb = colorArgb, createdAt = createdAt
+    )
+
     private fun PersonOptionPreferenceEntity.toBackup() = PersonOptionPreferenceBackup(
         personId = personId, savedOptionId = savedOptionId,
         preferenceLevel = preferenceLevel, hardExcluded = hardExcluded, updatedAt = updatedAt
@@ -247,6 +258,10 @@ class BackupManagerImpl @Inject constructor(
 
     private fun SavedOptionTagBackup.toEntity() = SavedOptionTagEntity(
         savedOptionId = savedOptionId, tagId = tagId
+    )
+
+    private fun TagBackup.toEntity() = TagEntity(
+        name = name, colorArgb = colorArgb, createdAt = createdAt
     )
 
     private fun PersonOptionPreferenceBackup.toEntity() = PersonOptionPreferenceEntity(

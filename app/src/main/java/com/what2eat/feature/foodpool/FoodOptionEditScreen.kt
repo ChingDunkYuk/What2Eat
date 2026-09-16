@@ -1,6 +1,7 @@
 package com.what2eat.feature.foodpool
 
 import com.what2eat.core.designsystem.icon.What2EatBackIcon
+import com.what2eat.core.designsystem.component.TagChip
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -208,6 +209,7 @@ fun FoodOptionEditScreen(
             )
 
             // v1.3.0：标签联想 chips（按使用数降序；已在 tags 中的不再出现；点选即填入）
+            // v1.6.0：TagChip 着色
             val visibleSuggestions = state.tagSuggestions.filter { it !in state.tags }
             if (visibleSuggestions.isNotEmpty()) {
                 Text(
@@ -217,10 +219,10 @@ fun FoodOptionEditScreen(
                 )
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     visibleSuggestions.forEach { tag ->
-                        FilterChip(
-                            selected = false,
-                            onClick = { viewModel.addTagSuggestion(tag) },
-                            label = { Text(tag) }
+                        TagChip(
+                            name = tag,
+                            colorArgb = state.tagColors[tag],
+                            onClick = { viewModel.addTagSuggestion(tag) }
                         )
                     }
                 }

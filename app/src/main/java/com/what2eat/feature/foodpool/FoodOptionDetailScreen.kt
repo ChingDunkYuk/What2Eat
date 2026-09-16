@@ -1,6 +1,7 @@
 package com.what2eat.feature.foodpool
 
 import com.what2eat.core.designsystem.icon.What2EatBackIcon
+import com.what2eat.core.designsystem.component.TagChip
 
 import android.content.Intent
 import android.net.Uri
@@ -130,11 +131,13 @@ fun FoodOptionDetailScreen(
                 }
             }
 
-            // 标签
+            // 标签（v1.6.0：TagChip 着色）
             if (state.tags.isNotEmpty()) {
                 InfoSection(title = "标签") {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        state.tags.forEach { Text("· $it") }
+                        state.tags.forEach { name ->
+                            TagChip(name = name, colorArgb = state.tagColors[name])
+                        }
                     }
                 }
             }

@@ -24,8 +24,8 @@ android {
         applicationId = "com.what2eat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 54
-        versionName = "1.5.0"
+        versionCode = 55
+        versionName = "1.6.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

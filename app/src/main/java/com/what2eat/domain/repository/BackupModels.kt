@@ -4,10 +4,13 @@ package com.what2eat.domain.repository
  * v0.9.3 备份/恢复：备份文件 payload DTO。
  *
  * 设计约定：
- * - 字段镜像 schema v7 实体（同名同型），备份格式与 DB schema 解耦，
+ * - 字段镜像 schema v8 实体（同名同型），备份格式与 DB schema 解耦，
  *   未来 schema 演进时备份格式迁移是显式动作（formatVersion 递增）。
  * - 除 formatVersion 外全部带默认值：导入时缺失字段容错填充，
- *   旧格式文件缺新字段也能导入（配合 ignoreUnknownKeys 双向兼容） */
+ *   旧格式文件缺新字段也能导入（配合 ignoreUnknownKeys 双向兼容）
+ * - v1.6.0：新增 tags（标签颜色）可选数组；旧文件缺失 → emptyList →
+ *   导入后 tag 表清空，颜色全部回落默认（与懒元数据策略天然兼容），
+ *   故 formatVersion 保持 1 不递增。 */
 data class BackupSummary(
     val profileCount: Int,
     val optionCount: Int,
@@ -28,7 +31,7 @@ class BackupFormatException(message: String) : Exception(message)
 /**
  * 备份管理器。
  *
- * 导出：全量 11 表快照 + usageMode → JSON。
+ * 导出：全量 12 表快照 + usageMode → JSON。
  * 导入：parseAndValidate 先解析校验（UI 弹确认），确认后 importAll 单事务全量替换。
  */
 interface BackupManager {
@@ -43,10 +46,10 @@ interface BackupManager {
     suspend fun importAll(backup: ValidatedBackup)
 }
 
-// ── 头字段 + 11 表 payload ──
+// ── 头字段 + 12 表 payload ──
 
 data class BackupPayload(
-    /** 备份格式版本（绑定 schema v7），必填——缺失即拒绝 */
+    /** 备份格式版本（绑定 schema v8），必填——缺失即拒绝 */
     val formatVersion: Int,
     val exportedAt: Long = 0L,
     val appVersion: String = "",
@@ -62,7 +65,9 @@ data class BackupPayload(
     val savedOptions: List<SavedOptionBackup> = emptyList(),
     val savedOptionCollections: List<SavedOptionCollectionBackup> = emptyList(),
     val savedOptionTags: List<SavedOptionTagBackup> = emptyList(),
-    val personOptionPreferences: List<PersonOptionPreferenceBackup> = emptyList()
+    val personOptionPreferences: List<PersonOptionPreferenceBackup> = emptyList(),
+    /** v1.6.0：标签颜色元数据（可选；旧文件缺失 → 导入后颜色回落默认） */
+    val tags: List<TagBackup> = emptyList()
 )
 
 data class PersonProfileBackup(
@@ -167,6 +172,13 @@ data class SavedOptionCollectionBackup(
 data class SavedOptionTagBackup(
     val savedOptionId: String = "",
     val tagId: String = ""
+)
+
+/** v1.6.0：标签颜色元数据（tag 表镜像） */
+data class TagBackup(
+    val name: String = "",
+    val colorArgb: Int = 0,
+    val createdAt: Long = 0L
 )
 
 data class PersonOptionPreferenceBackup(

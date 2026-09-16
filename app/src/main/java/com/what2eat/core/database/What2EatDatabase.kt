@@ -13,6 +13,7 @@ import com.what2eat.core.database.dao.SavedOptionDao
 import com.what2eat.core.database.dao.SavedOptionTagDao
 import com.what2eat.core.database.dao.SessionCategorySelectionDao
 import com.what2eat.core.database.dao.SessionParticipantDao
+import com.what2eat.core.database.dao.TagDao
 import com.what2eat.core.database.entity.DecisionRecommendationEntity
 import com.what2eat.core.database.entity.DecisionSessionEntity
 import com.what2eat.core.database.entity.FoodCategoryEntity
@@ -24,6 +25,7 @@ import com.what2eat.core.database.entity.SavedOptionEntity
 import com.what2eat.core.database.entity.SavedOptionTagEntity
 import com.what2eat.core.database.entity.SessionCategorySelectionEntity
 import com.what2eat.core.database.entity.SessionParticipantEntity
+import com.what2eat.core.database.entity.TagEntity
 
 /**
  * What2Eat Room 数据库。
@@ -35,6 +37,7 @@ import com.what2eat.core.database.entity.SessionParticipantEntity
  *            saved_option_tag、person_option_preference。
  * v0.7.8:    版本升级到 6，MIGRATION_5_6 清理旧解析缺陷留下的「地址：/电话：」脏名称。
  * v0.8.0:    版本升级到 7，decision_session 新增 selectedOptionId 列（「从吃饭池决定」结果）。
+ * v1.6.0:    版本升级到 8，新增 tag 元数据表（标签颜色），存量标签种子化默认色。
  */
 @Database(
     entities = [
@@ -48,9 +51,10 @@ import com.what2eat.core.database.entity.SessionParticipantEntity
         SavedOptionEntity::class,
         SavedOptionCollectionEntity::class,
         SavedOptionTagEntity::class,
-        PersonOptionPreferenceEntity::class
+        PersonOptionPreferenceEntity::class,
+        TagEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 abstract class What2EatDatabase : RoomDatabase() {
@@ -66,6 +70,7 @@ abstract class What2EatDatabase : RoomDatabase() {
     abstract fun savedOptionCollectionDao(): SavedOptionCollectionDao
     abstract fun savedOptionTagDao(): SavedOptionTagDao
     abstract fun personOptionPreferenceDao(): PersonOptionPreferenceDao
+    abstract fun tagDao(): TagDao
 
     companion object {
         const val DATABASE_NAME = "what2eat.db"

@@ -3,6 +3,7 @@ package com.what2eat.core.database
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.what2eat.domain.model.SourcePlatform
+import com.what2eat.domain.model.TagPalette
 import com.what2eat.domain.share.ShareImportDefaults
 
 /**
@@ -315,5 +316,31 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
 val MIGRATION_6_7 = object : Migration(6, 7) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE `decision_session` ADD COLUMN `selectedOptionId` TEXT")
+    }
+}
+
+/**
+ * MIGRATION_7_8: v7 → v8
+ * v1.6.0 标签颜色：新增 tag 元数据表（name PK / colorArgb / createdAt），
+ * 并从 saved_option_tag 种子化存量标签（默认色，createdAt=0）。
+ * 幂等：CREATE IF NOT EXISTS + INSERT OR IGNORE，重复执行无副作用。
+ * 非 destructive：只新增表与种子行，不动任何既有数据。
+ */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `tag` (
+                `name` TEXT NOT NULL,
+                `colorArgb` INTEGER NOT NULL,
+                `createdAt` INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(`name`)
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            "INSERT OR IGNORE INTO `tag` (`name`, `colorArgb`, `createdAt`) " +
+                "SELECT DISTINCT `tagId`, ${TagPalette.DEFAULT}, 0 FROM `saved_option_tag`"
+        )
     }
 }
