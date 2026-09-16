@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.6.1：启动器单色层——「饭团仔」实心剪影（系统主题化只取 alpha；
+     与前景同 group 变换，海苔/五官不做镂空，小尺寸下剪影最清晰） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <group
+        android:scaleX="0.85"
+        android:scaleY="0.85"
+        android:pivotX="24"
+        android:pivotY="27">
+        <path
+            android:fillColor="#3A1700"
+            android:pathData="M24,9.5 C28.6,9.5 36.6,28.6 36.6,32.8 C36.6,35.2 35.0,36.4 32.6,36.4 L15.4,36.4 C13.0,36.4 11.4,35.2 11.4,32.8 C11.4,28.6 19.4,9.5 24,9.5 Z M24,7.7 C21.9,6.425 22.875,4.85 24,5.75 C25.125,4.85 26.1,6.425 24,7.7 Z" />
+    </group>
+</vector>

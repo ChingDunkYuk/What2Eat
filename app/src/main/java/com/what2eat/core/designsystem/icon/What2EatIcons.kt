@@ -773,11 +773,11 @@ object What2EatIcons {
     }
 
     /**
-     * 品牌吉祥物「饭碗小精灵饭饭」Q 版（多彩矢量，与启动器 Logo 同款）。
+     * 品牌吉祥物「饭团仔」Q 版（多彩矢量，与启动器 Logo 同款）。
      *
      * 多色图标：使用时 Icon(tint = Color.Unspecified) 保留原色。
-     * Q 版要点：大头小身、头顶爱心呆毛、米白饭团脸带米粒、
-     * 高光大眼 + 张嘴笑 + 大腮红、挥手小圆手、小短脚、热气与闪光。
+     * Q 版要点：圆角三角米白身体、深苔绿海苔包底、头顶爱心呆毛、
+     * 高光大眼 + 张嘴笑 + 大腮红、挥手小圆手、米粒与闪光。
      */
     val Mascot: ImageVector by lazy {
         ImageVector.Builder(
@@ -788,109 +788,92 @@ object What2EatIcons {
             viewportHeight = 48f
         ).apply {
             val brown = Color(0xFF6B3F1D)
-            val bowlOrange = Color(0xFFE08A3C)
             val cream = Color(0xFFFFF8F2)
             val grain = Color(0xFFF5E3CC)
             val blush = Color(0xFFFFBFA0)
             val ink = Color(0xFF3A1700)
-            val steam = Color(0xFFD9772F)
             val heartRed = Color(0xFFE2543E)
+            val nori = Color(0xFF33452E)
+            val handOrange = Color(0xFFE08A3C)
+            val sparkle = Color(0xFFD9772F)
 
-            // 热气三小圆（中间更高，更有活力）
-            path(fill = SolidColor(steam.copy(alpha = 0.85f))) {
-                circlePath(17.5f, 7.4f, 1.35f)
-                circlePath(24.0f, 4.9f, 1.7f)
-                circlePath(30.5f, 7.4f, 1.35f)
-            }
-
-            // 小手：左手举高挥手，右手搭在碗边（圆手套）
+            // 小手：左手举高挥手，右手自然张开（圆手套）
             path(
-                fill = SolidColor(bowlOrange),
+                fill = SolidColor(handOrange),
                 stroke = SolidColor(brown), strokeLineWidth = 1.4f
             ) {
-                circlePath(6.8f, 23.2f, 2.0f)
-                circlePath(41.2f, 28.8f, 2.0f)
+                circlePath(7.2f, 24.5f, 2.0f)
+                circlePath(40.8f, 27.5f, 2.0f)
             }
             // 挥手运动线（两小弧）
             path(
                 stroke = SolidColor(brown.copy(alpha = 0.55f)),
                 strokeLineWidth = 1.3f, strokeLineCap = StrokeCap.Round
             ) {
-                moveTo(3.2f, 19.4f)
-                quadTo(2.0f, 20.6f, 2.2f, 22.2f)
-                moveTo(5.4f, 17.6f)
-                quadTo(3.9f, 18.3f, 3.0f, 19.6f)
+                moveTo(3.6f, 20.8f)
+                quadTo(2.4f, 22.0f, 2.6f, 23.6f)
+                moveTo(5.8f, 19.0f)
+                quadTo(4.3f, 19.7f, 3.4f, 21.0f)
             }
 
-            // 饭团大脑袋（更宽更圆的圆顶）
+            // 饭团身体（圆角三角，奶油米白）
             path(
                 fill = SolidColor(cream),
                 stroke = SolidColor(brown), strokeLineWidth = 1.7f,
                 strokeLineJoin = StrokeJoin.Round
             ) {
-                moveTo(9.5f, 25.2f)
-                curveTo(9.5f, 13.6f, 38.5f, 13.6f, 38.5f, 25.2f)
+                moveTo(24.0f, 9.5f)
+                curveTo(28.6f, 9.5f, 36.6f, 28.6f, 36.6f, 32.8f)
+                curveTo(36.6f, 35.2f, 35.0f, 36.4f, 32.6f, 36.4f)
+                lineTo(15.4f, 36.4f)
+                curveTo(13.0f, 36.4f, 11.4f, 35.2f, 11.4f, 32.8f)
+                curveTo(11.4f, 28.6f, 19.4f, 9.5f, 24.0f, 9.5f)
                 close()
             }
-            // 头顶爱心呆毛
+            // 头顶爱心呆毛（招牌元素）
             path(fill = SolidColor(heartRed), stroke = SolidColor(brown), strokeLineWidth = 0.8f) {
-                heart(24.0f, 12.3f, 1.5f)
+                heart(24.0f, 6.2f, 1.5f)
             }
             // 米粒装饰两粒
             path(fill = SolidColor(grain)) {
-                roundedRect(16.2f, 17.8f, 19.6f, 19.2f, 0.7f)
-                roundedRect(27.4f, 19.6f, 30.4f, 20.8f, 0.6f)
+                roundedRect(19.6f, 14.6f, 22.6f, 16.0f, 0.7f)
+                roundedRect(26.8f, 16.2f, 29.4f, 17.4f, 0.6f)
             }
 
-            // 碗身（奶油橘，Q 版更矮胖）
-            path(fill = SolidColor(bowlOrange), stroke = SolidColor(brown), strokeLineWidth = 1.7f) {
-                moveTo(8.6f, 25.2f)
-                lineTo(39.4f, 25.2f)
-                curveTo(39.4f, 34.6f, 33.2f, 40.2f, 24.0f, 40.2f)
-                curveTo(14.8f, 40.2f, 8.6f, 34.6f, 8.6f, 25.2f)
-                close()
-            }
-            // 小短脚 ×2
+            // 海苔（深苔绿，包住底部）
             path(
-                fill = SolidColor(brown),
+                fill = SolidColor(nori),
+                stroke = SolidColor(brown), strokeLineWidth = 1.2f,
                 strokeLineJoin = StrokeJoin.Round
             ) {
-                roundedRect(19.6f, 39.6f, 23.2f, 41.6f, 0.9f)
-                roundedRect(24.8f, 39.6f, 28.4f, 41.6f, 0.9f)
-            }
-            // 碗身波浪条纹（米白）
-            path(stroke = SolidColor(cream), strokeLineWidth = 1.9f,
-                strokeLineCap = StrokeCap.Round) {
-                moveTo(13.2f, 29.0f)
-                quadTo(18.6f, 27.7f, 24.0f, 29.0f)
-                quadTo(29.4f, 30.3f, 34.8f, 29.0f)
+                roundedRect(19.3f, 27.6f, 28.7f, 36.4f, 1.6f)
             }
 
             // 高光大眼（黑瞳 + 白高光）
             path(fill = SolidColor(ink)) {
-                circlePath(19.0f, 31.8f, 1.8f)
-                circlePath(29.0f, 31.8f, 1.8f)
+                circlePath(19.6f, 22.2f, 1.7f)
+                circlePath(28.4f, 22.2f, 1.7f)
             }
             path(fill = SolidColor(Color.White)) {
-                circlePath(18.35f, 31.15f, 0.6f)
-                circlePath(28.35f, 31.15f, 0.6f)
+                circlePath(18.95f, 21.55f, 0.55f)
+                circlePath(27.75f, 21.55f, 0.55f)
             }
             // 张嘴笑（开心到张嘴）
             path(fill = SolidColor(ink), strokeLineJoin = StrokeJoin.Round) {
-                moveTo(21.4f, 34.8f)
-                curveTo(22.3f, 37.8f, 25.7f, 37.8f, 26.6f, 34.8f)
+                moveTo(22.2f, 24.2f)
+                curveTo(22.9f, 26.6f, 25.1f, 26.6f, 25.8f, 24.2f)
                 close()
             }
             // 大腮红
             path(fill = SolidColor(blush.copy(alpha = 0.95f))) {
-                circlePath(14.2f, 34.4f, 1.9f)
-                circlePath(33.8f, 34.4f, 1.9f)
+                circlePath(15.4f, 25.2f, 1.7f)
+                circlePath(32.6f, 25.2f, 1.7f)
             }
 
             // 闪光点缀
-            path(fill = SolidColor(steam.copy(alpha = 0.9f))) {
-                star4(8.6f, 10.2f, 1.0f)
-                star4(40.4f, 13.6f, 0.85f)
+            path(fill = SolidColor(sparkle.copy(alpha = 0.9f))) {
+                star4(9.0f, 12.0f, 1.0f)
+                star4(39.6f, 14.8f, 0.85f)
             }
         }.build()
     }
