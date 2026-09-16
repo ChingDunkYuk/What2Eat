@@ -776,7 +776,7 @@ object What2EatIcons {
      * 品牌吉祥物「饭团仔」Q 版（多彩矢量，与启动器 Logo 同款）。
      *
      * 多色图标：使用时 Icon(tint = Color.Unspecified) 保留原色。
-     * Q 版要点：圆角三角米白身体、深苔绿海苔包底、头顶爱心呆毛、
+     * Q 版要点：圆顶三角团子（顶部整弧无尖角）、深苔绿海苔包底、头顶爱心呆毛、
      * 高光大眼 + 张嘴笑 + 大腮红、挥手小圆手、米粒与闪光。
      */
     val Mascot: ImageVector by lazy {
@@ -816,18 +816,24 @@ object What2EatIcons {
                 quadTo(4.3f, 19.7f, 3.4f, 21.0f)
             }
 
-            // 饭团身体（圆角三角，奶油米白）
+            // 饭团身体（圆顶三角团子：顶部整弧无尖角，两侧外鼓，底角圆润）
             path(
                 fill = SolidColor(cream),
                 stroke = SolidColor(brown), strokeLineWidth = 1.7f,
                 strokeLineJoin = StrokeJoin.Round
             ) {
-                moveTo(24.0f, 9.5f)
-                curveTo(28.6f, 9.5f, 36.6f, 28.6f, 36.6f, 32.8f)
-                curveTo(36.6f, 35.2f, 35.0f, 36.4f, 32.6f, 36.4f)
-                lineTo(15.4f, 36.4f)
-                curveTo(13.0f, 36.4f, 11.4f, 35.2f, 11.4f, 32.8f)
-                curveTo(11.4f, 28.6f, 19.4f, 9.5f, 24.0f, 9.5f)
+                moveTo(16.4f, 13.2f)
+                // 圆顶（左肩 → 顶部整弧 → 右肩）
+                curveTo(18.4f, 8.6f, 29.6f, 8.6f, 31.6f, 13.2f)
+                // 右侧外鼓下行
+                curveTo(35.2f, 20.4f, 37.2f, 28.2f, 37.2f, 32.4f)
+                // 底角右
+                curveTo(37.2f, 35.0f, 35.4f, 36.4f, 32.8f, 36.4f)
+                lineTo(15.2f, 36.4f)
+                // 底角左
+                curveTo(12.6f, 36.4f, 10.8f, 35.0f, 10.8f, 32.4f)
+                // 左侧外鼓上行回左肩
+                curveTo(10.8f, 28.2f, 12.8f, 20.4f, 16.4f, 13.2f)
                 close()
             }
             // 头顶爱心呆毛（招牌元素）

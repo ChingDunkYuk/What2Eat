@@ -12,13 +12,13 @@
         android:scaleY="0.85"
         android:pivotX="24"
         android:pivotY="27">
-        <!-- 饭团身体（圆角三角，奶油米白） -->
+        <!-- 饭团身体（圆顶三角团子：顶部整弧无尖角，两侧外鼓，底角圆润） -->
         <path
             android:fillColor="#FFF8F2"
             android:strokeColor="#6B3F1D"
             android:strokeWidth="1.7"
             android:strokeLineJoin="round"
-            android:pathData="M24,9.5 C28.6,9.5 36.6,28.6 36.6,32.8 C36.6,35.2 35.0,36.4 32.6,36.4 L15.4,36.4 C13.0,36.4 11.4,35.2 11.4,32.8 C11.4,28.6 19.4,9.5 24,9.5 Z" />
+            android:pathData="M16.4,13.2 C18.4,8.6 29.6,8.6 31.6,13.2 C35.2,20.4 37.2,28.2 37.2,32.4 C37.2,35.0 35.4,36.4 32.8,36.4 L15.2,36.4 C12.6,36.4 10.8,35.0 10.8,32.4 C10.8,28.2 12.8,20.4 16.4,13.2 Z" />
         <!-- 头顶爱心呆毛 -->
         <path
             android:fillColor="#E2543E"
