@@ -5,6 +5,7 @@ import com.what2eat.core.designsystem.animation.entranceBounce
 import com.what2eat.core.designsystem.animation.gentleBob
 import com.what2eat.core.designsystem.icon.What2EatIcons
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -82,12 +84,13 @@ fun HomeScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Icon(
-                imageVector = What2EatIcons.Mascot,
+            // v1.6.4：吉祥物改位图（饭团仔参考图；圆角贴纸风）
+            Image(
+                painter = painterResource(R.drawable.mascot_onigiri),
                 contentDescription = null,
-                tint = Color.Unspecified,
                 modifier = Modifier
                     .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
                     .gentleBob()
             )
             Text(

@@ -1,6 +1,9 @@
 package com.what2eat.feature.shareimport
 
 import com.what2eat.core.designsystem.icon.What2EatBackIcon
+import com.what2eat.R
+
+import androidx.compose.foundation.Image
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -44,14 +47,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.what2eat.core.designsystem.icon.What2EatIcons
 import com.what2eat.data.share.FetchDebugLog
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -429,11 +433,13 @@ private fun ShareImportSuccessScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(modifier = Modifier.height(24.dp))
-            Icon(
-                imageVector = What2EatIcons.Mascot,
+            // v1.6.4：吉祥物改位图（饭团仔参考图；圆角贴纸风）
+            Image(
+                painter = painterResource(R.drawable.mascot_onigiri),
                 contentDescription = null,
-                tint = Color.Unspecified,
-                modifier = Modifier.size(96.dp)
+                modifier = Modifier
+                    .size(96.dp)
+                    .clip(RoundedCornerShape(24.dp))
             )
             Text("已收进待整理", style = MaterialTheme.typography.headlineSmall)
             Text(

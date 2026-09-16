@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -33,16 +35,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.what2eat.MainViewModel
-import com.what2eat.core.designsystem.icon.What2EatIcons
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.what2eat.R
@@ -78,12 +81,13 @@ fun OnboardingScreen(
             ),
             label = "mascotOffsetY"
         )
-        Icon(
-            imageVector = What2EatIcons.Mascot,
+        // v1.6.4：吉祥物改位图（饭团仔参考图；圆角贴纸风）
+        Image(
+            painter = painterResource(R.drawable.mascot_onigiri),
             contentDescription = null,
-            tint = Color.Unspecified,
             modifier = Modifier
                 .size(160.dp)
+                .clip(RoundedCornerShape(36.dp))
                 .graphicsLayer { translationY = offsetY }
         )
 
@@ -165,12 +169,13 @@ fun CuteSplashScreen() {
                 breathe.animateTo(1f, tween(900, easing = FastOutSlowInEasing))
             }
         }
-        Icon(
-            imageVector = What2EatIcons.Mascot,
+        // v1.6.4：吉祥物改位图（饭团仔参考图；圆角贴纸风）
+        Image(
+            painter = painterResource(R.drawable.mascot_onigiri),
             contentDescription = null,
-            tint = Color.Unspecified,
             modifier = Modifier
                 .size(140.dp)
+                .clip(RoundedCornerShape(32.dp))
                 .scale(breathe.value)
         )
 

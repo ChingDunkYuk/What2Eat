@@ -5,7 +5,9 @@ import com.what2eat.core.designsystem.animation.entranceBounce
 import com.what2eat.core.designsystem.animation.gentleBob
 import com.what2eat.core.designsystem.icon.What2EatBackIcon
 import com.what2eat.core.designsystem.icon.What2EatIcons
+import com.what2eat.R
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -399,12 +402,13 @@ private fun EmptyPoolContent(onGoToPool: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Icon(
-            imageVector = What2EatIcons.Mascot,
+        // v1.6.4：吉祥物改位图（饭团仔参考图；圆角贴纸风）
+        Image(
+            painter = painterResource(R.drawable.mascot_onigiri),
             contentDescription = null,
-            tint = Color.Unspecified,
             modifier = Modifier
                 .size(72.dp)
+                .clip(RoundedCornerShape(18.dp))
                 .gentleBob()
         )
         Text(
