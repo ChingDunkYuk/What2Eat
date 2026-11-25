@@ -5,6 +5,13 @@ What2Eat 的版本记录。格式：版本号（versionCode）｜日期｜要点
 
 ---
 
+## v1.6.5（60）｜2026-11-25
+
+### 变更
+- **桌面图标优化（情侣筷子爱心版「饭团仔」）**：
+  - 前景 `mipmap-xxxhdpi/ic_launcher_foreground.png` 升级为手持小木筷 + 小爱心的「饭团仔」透明底 PNG（去除原前景方形接缝，补充脚底柔和投影，65% 安全区居中）
+  - 背景 `drawable/ic_launcher_background.xml` 由纯色 `#FEFFF1` 升级为奶油米白到杏橘的径向渐变（`#FFF8F0 → #FAD3AE`），呼应应用主色调
+
 ## v1.6.4（59）｜2026-09-16
 
 ### 变更
